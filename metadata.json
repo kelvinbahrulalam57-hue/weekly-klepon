@@ -1,0 +1,6 @@
+{
+  "name": "KLEPON WEEKLY TURNAMENT FREE",
+  "description": "KLEPON WEEKLY TURNAMENT FREE — Turnamen Mingguan Gratis Free Fire Clash Squad. Kumpulkan poin FT, raih Top 10 untuk masuk bagan turnamen mingguan berhadiah Rp 30.000.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,161 @@
+{
+  "entities": {
+    "Participant": {
+      "title": "Participant",
+      "description": "Registered tournament participant player profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "phone": { "type": "string" },
+        "name": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "registeredAt": { "type": "string" },
+        "points": { "type": "number" },
+        "wins": { "type": "number" },
+        "matchesPlayed": { "type": "number" }
+      },
+      "required": ["phone", "name"]
+    },
+    "PlayerTeam": {
+      "title": "PlayerTeam",
+      "description": "Leaderboard team record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "tag": { "type": "string" },
+        "captainName": { "type": "string" },
+        "phone": { "type": "string" },
+        "points": { "type": "number" },
+        "wins": { "type": "number" },
+        "matchesPlayed": { "type": "number" },
+        "game": { "type": "string" },
+        "status": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "phone", "points"]
+    },
+    "WinReport": {
+      "title": "WinReport",
+      "description": "Setoran kemenangan dengan foto stiker DONE di GB",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "participantId": { "type": "string" },
+        "phone": { "type": "string" },
+        "teamName": { "type": "string" },
+        "captainName": { "type": "string" },
+        "storanDate": { "type": "string" },
+        "potName": { "type": "string" },
+        "screenshotUrl": { "type": "string" },
+        "status": { "type": "string" },
+        "pointsAwarded": { "type": "number" },
+        "adminNotes": { "type": "string" },
+        "submittedAt": { "type": "string" },
+        "verifiedAt": { "type": "string" },
+        "verifiedBy": { "type": "string" }
+      },
+      "required": ["phone", "teamName", "screenshotUrl", "status"]
+    },
+    "BannerPoster": {
+      "title": "BannerPoster",
+      "description": "Poster atau banner turnamen dari galeri untuk halaman utama",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "caption": { "type": "string" },
+        "isMain": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "imageUrl"]
+    },
+    "SeasonConfig": {
+      "title": "SeasonConfig",
+      "description": "Pengaturan season mingguan dan hadiah",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "weekNumber": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "totalPrizePool": { "type": "string" },
+        "firstPrize": { "type": "string" },
+        "secondPrize": { "type": "string" },
+        "thirdPrize": { "type": "string" },
+        "entryFee": { "type": "string" },
+        "lastAutoReset": { "type": "string" }
+      },
+      "required": ["name", "weekNumber"]
+    },
+    "Blacklist": {
+      "title": "Blacklist",
+      "description": "Daftar penipu yang di-blacklist",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "teamName": { "type": "string" },
+        "captainName": { "type": "string" },
+        "phone": { "type": "string" },
+        "game": { "type": "string" },
+        "reason": { "type": "string" },
+        "penalty": { "type": "string" },
+        "evidenceSummary": { "type": "string" },
+        "date": { "type": "string" }
+      },
+      "required": ["teamName", "phone", "reason"]
+    },
+    "Contacts": {
+      "title": "Contacts",
+      "description": "Pengaturan kontak panitia dan akun sosial media resmi",
+      "type": "object",
+      "properties": {
+        "adminName": { "type": "string" },
+        "adminPhone": { "type": "string" },
+        "consultationWaUrl": { "type": "string" },
+        "infoChannelName": { "type": "string" },
+        "infoChannelLink": { "type": "string" },
+        "tiktokName": { "type": "string" },
+        "tiktokUrl": { "type": "string" },
+        "instagramName": { "type": "string" },
+        "instagramUrl": { "type": "string" },
+        "whatsappGroupName": { "type": "string" },
+        "whatsappGroupUrl": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/participants/{participantId}": {
+      "schema": "Participant",
+      "description": "Profil peserta terdaftar dengan no HP, nama, dan foto"
+    },
+    "/players/{playerId}": {
+      "schema": "PlayerTeam",
+      "description": "Data klasemen kualifikasi top 10"
+    },
+    "/winReports/{reportId}": {
+      "schema": "WinReport",
+      "description": "Laporan storan kemenangan dengan foto stiker DONE di GB"
+    },
+    "/banners/{bannerId}": {
+      "schema": "BannerPoster",
+      "description": "Poster pamflet turnamen galeri halaman utama"
+    },
+    "/season/{seasonId}": {
+      "schema": "SeasonConfig",
+      "description": "Konfigurasi season aktif dan total hadiah"
+    },
+    "/blacklist/{blacklistId}": {
+      "schema": "Blacklist",
+      "description": "Daftar tim dan no HP cheater/penipu"
+    },
+    "/contacts/{contactId}": {
+      "schema": "Contacts",
+      "description": "Pengaturan kontak panitia dan media sosial resmi"
+    }
+  }
+}
