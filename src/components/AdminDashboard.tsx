@@ -43,6 +43,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
   const [isBannerUploading, setIsBannerUploading] = useState(false);
   const [selectedBannerPreview, setSelectedBannerPreview] = useState<BannerPoster | null>(null);
 
+  // Edit banner state
+  const [editingBanner, setEditingBanner] = useState<BannerPoster | null>(null);
+  const [editBannerTitle, setEditBannerTitle] = useState('');
+  const [editBannerCaption, setEditBannerCaption] = useState('');
+  const [editBannerImage, setEditBannerImage] = useState('');
+  const [editBannerIsMain, setEditBannerIsMain] = useState(false);
+  const [isEditBannerUploading, setIsEditBannerUploading] = useState(false);
+
+  // In-app Confirmation Modal state (replacing window.confirm for iframe sandbox safety)
+  const [confirmModal, setConfirmModal] = useState<{
+    type: 'reset_season' | 'delete_participant' | 'delete_banner' | 'delete_blacklist';
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    payload?: any;
+  } | null>(null);
+
   // Blacklist management state
   const [showAddBlForm, setShowAddBlForm] = useState(false);
   const [blTeamName, setBlTeamName] = useState('');
@@ -120,7 +137,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
     e.preventDefault();
     if (!selectedReport) return;
     if (!rejectReason.trim()) {
-      alert('Alasan penolakan wajib diisi untuk edukasi tim!');
+      onNotify('Alasan penolakan wajib diisi untuk edukasi tim!');
       return;
     }
 
@@ -150,7 +167,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
   const handleBannerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!bannerTitle.trim() || !bannerImage) {
-      alert('Judul poster dan file foto dari galeri wajib diisi!');
+      onNotify('Judul poster dan file foto dari galeri wajib diisi!');
       return;
     }
 
@@ -167,6 +184,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
     setBannerCaption('');
     setBannerImage('');
     setBannerSetAsMain(false);
+  };
+
+  // Banner edit handlers
+  const handleStartEditBanner = (b: BannerPoster) => {
+    setEditingBanner(b);
+    setEditBannerTitle(b.title);
+    setEditBannerCaption(b.caption || '');
+    setEditBannerImage(b.imageUrl);
+    setEditBannerIsMain(Boolean(b.isMain));
+  };
+
+  const handleEditBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsEditBannerUploading(true);
+      try {
+        const compressed = await compressImage(file, 1280, 1280, 0.8);
+        setEditBannerImage(compressed);
+        onNotify('Foto pengganti poster berhasil dikompres.');
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsEditBannerUploading(false);
+      }
+    }
+  };
+
+  const handleSaveEditBanner = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBanner) return;
+    if (!editBannerTitle.trim() || !editBannerImage) {
+      onNotify('Judul dan file foto poster tidak boleh kosong!');
+      return;
+    }
+
+    esportsStore.updateBannerPoster(editingBanner.id, {
+      title: editBannerTitle.trim(),
+      caption: editBannerCaption.trim(),
+      imageUrl: editBannerImage,
+      isMain: editBannerIsMain,
+    });
+
+    onNotify(`Poster "${editBannerTitle.trim()}" berhasil diperbarui!`);
+    setEditingBanner(null);
+  };
+
+  const handleDeleteBannerClick = (b: BannerPoster) => {
+    setConfirmModal({
+      type: 'delete_banner',
+      title: 'Hapus Poster Turnamen?',
+      message: `Apakah Anda yakin ingin menghapus poster "${b.title}"? Poster tidak akan ditampilkan lagi kepada pengunjung.`,
+      confirmLabel: 'Ya, Hapus Poster',
+      payload: b,
+    });
   };
 
   const handleSaveContacts = (e: React.FormEvent) => {
@@ -187,17 +258,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
   };
 
   const handleResetSeason = () => {
-    if (confirm('PERINGATAN: Apakah Anda yakin ingin meriset seluruh poin klasemen turnamen mingguan ke 0 untuk membuka putaran baru?')) {
-      esportsStore.manualResetSeason();
-      onNotify('Klasemen turnamen mingguan berhasil direset ke 0!');
-    }
+    setConfirmModal({
+      type: 'reset_season',
+      title: 'Reset Seluruh Poin Klasemen?',
+      message: 'PERINGATAN: Seluruh poin klasemen turnamen saat ini akan direset ke 0 untuk membuka putaran baru. Apakah Anda yakin?',
+      confirmLabel: 'Ya, Reset Poin Sekarang',
+    });
   };
 
   const handleDeleteParticipant = (part: ParticipantUser) => {
-    if (confirm(`HAPUS PESERTA: Apakah Anda yakin ingin menghapus tim "${part.name}" (${part.phone}) dari database turnamen? Data poin dan storan kemenangan tim ini akan dihapus permanen.`)) {
-      esportsStore.deleteParticipant(part.id);
-      onNotify(`Peserta "${part.name}" berhasil dihapus dari database.`);
-    }
+    setConfirmModal({
+      type: 'delete_participant',
+      title: 'Hapus Peserta dari Database?',
+      message: `HAPUS PESERTA: Apakah Anda yakin ingin menghapus tim "${part.name}" (${part.phone}) dari database turnamen? Data poin dan riwayat storan kemenangan tim ini akan dihapus permanen.`,
+      confirmLabel: 'Ya, Hapus Permanen',
+      payload: part,
+    });
   };
 
   const handleSaveEditParticipant = (e: React.FormEvent) => {
@@ -217,7 +293,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
   const handleAddBlacklist = (e: React.FormEvent) => {
     e.preventDefault();
     if (!blTeamName.trim() || !blPhone.trim() || !blReason.trim()) {
-      alert('Nama tim, no hp, dan alasan sanksi wajib diisi!');
+      onNotify('Nama tim, no hp, dan alasan sanksi wajib diisi!');
       return;
     }
 
@@ -257,10 +333,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
   };
 
   const handleDeleteBlacklist = (entry: BlacklistEntry) => {
-    if (confirm(`Apakah Anda yakin ingin mencabut sanksi dan menghapus ${entry.teamName} dari daftar blacklist?`)) {
+    setConfirmModal({
+      type: 'delete_blacklist',
+      title: 'Cabut Sanksi Pelanggaran?',
+      message: `Apakah Anda yakin ingin mencabut sanksi dan menghapus "${entry.teamName}" dari daftar blacklist?`,
+      confirmLabel: 'Ya, Cabut Sanksi',
+      payload: entry,
+    });
+  };
+
+  // Safe executor for in-app modal actions
+  const handleConfirmAction = () => {
+    if (!confirmModal) return;
+
+    if (confirmModal.type === 'delete_participant') {
+      const part = confirmModal.payload as ParticipantUser;
+      esportsStore.deleteParticipant(part.id);
+      onNotify(`Peserta "${part.name}" (${part.phone}) berhasil dihapus dari database.`);
+    } else if (confirmModal.type === 'delete_banner') {
+      const b = confirmModal.payload as BannerPoster;
+      esportsStore.deleteBannerPoster(b.id);
+      onNotify(`Poster "${b.title}" berhasil dihapus.`);
+    } else if (confirmModal.type === 'reset_season') {
+      esportsStore.manualResetSeason();
+      onNotify('Klasemen turnamen mingguan berhasil direset ke 0!');
+    } else if (confirmModal.type === 'delete_blacklist') {
+      const entry = confirmModal.payload as BlacklistEntry;
       esportsStore.deleteBlacklistEntry(entry.id);
-      onNotify(`Sanksi untuk ${entry.teamName} berhasil dicabut.`);
+      onNotify(`Sanksi untuk "${entry.teamName}" berhasil dicabut.`);
     }
+
+    setConfirmModal(null);
   };
 
   // Stealth Unauthenticated Screen
@@ -992,38 +1095,152 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
                   </div>
                   <div className="p-3.5 space-y-2">
                     <h5 className="font-bold text-white text-xs line-clamp-1">{b.title}</h5>
-                    <div className="flex items-center justify-between pt-2 border-t border-blue-950">
-                      {!b.isMain && (
+                    {b.caption && (
+                      <p className="text-[11px] text-slate-400 line-clamp-2">{b.caption}</p>
+                    )}
+                    <div className="flex items-center justify-between pt-2 border-t border-blue-950 gap-2">
+                      <div className="flex items-center gap-2">
+                        {!b.isMain && (
+                          <button
+                            onClick={() => {
+                              esportsStore.setMainBanner(b.id);
+                              onNotify('Poster utama berhasil diubah.');
+                            }}
+                            className="text-cyan-400 hover:text-cyan-300 text-[11px] font-bold cursor-pointer transition-colors"
+                          >
+                            Set Utama
+                          </button>
+                        )}
                         <button
-                          onClick={() => {
-                            esportsStore.setMainBanner(b.id);
-                            onNotify('Poster utama berhasil diubah.');
-                          }}
-                          className="text-cyan-400 hover:underline text-[11px] font-bold cursor-pointer"
+                          onClick={() => handleStartEditBanner(b)}
+                          className="px-2 py-0.5 bg-blue-950 hover:bg-blue-900 border border-blue-600/40 text-cyan-300 rounded text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                          title="Edit Poster"
                         >
-                          Set Utama
+                          <Edit2 className="w-3 h-3" />
+                          <span>Edit</span>
                         </button>
-                      )}
-                      {banners.length > 1 && (
-                        <button
-                          onClick={() => {
-                            if (confirm('Hapus poster ini?')) {
-                              esportsStore.deleteBannerPoster(b.id);
-                              onNotify('Poster dihapus.');
-                            }
-                          }}
-                          className="text-rose-400 hover:underline text-[11px] flex items-center gap-1 cursor-pointer"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          <span>Hapus</span>
-                        </button>
-                      )}
+                      </div>
+                      <button
+                        onClick={() => handleDeleteBannerClick(b)}
+                        className="px-2 py-0.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-600/40 text-rose-300 hover:text-rose-200 text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                        title="Hapus Poster"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Hapus</span>
+                      </button>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
+
+          {/* Modal Edit Poster Turnamen */}
+          {editingBanner && (
+            <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-[#070f2c] border border-blue-700 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl text-xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-blue-900/60">
+                  <h4 className="font-bold text-white text-sm uppercase flex items-center gap-2">
+                    <Edit2 className="w-4 h-4 text-cyan-400" />
+                    <span>Edit Poster Turnamen</span>
+                  </h4>
+                  <button
+                    onClick={() => setEditingBanner(null)}
+                    className="text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveEditBanner} className="space-y-4">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Judul Poster *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editBannerTitle}
+                      onChange={(e) => setEditBannerTitle(e.target.value)}
+                      className="w-full bg-[#030616] border border-blue-900/70 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-cyan-400 text-xs font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Keterangan / Deskripsi Poster
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={editBannerCaption}
+                      onChange={(e) => setEditBannerCaption(e.target.value)}
+                      className="w-full bg-[#030616] border border-blue-900/70 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-cyan-400 text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Foto Poster Turnamen
+                    </label>
+                    <div className="border border-blue-800 rounded-xl p-3 bg-[#030616]/70 flex items-center gap-3">
+                      <img
+                        src={editBannerImage}
+                        alt="Preview"
+                        className="w-24 h-16 object-cover rounded-lg border border-blue-700 bg-black flex-shrink-0"
+                      />
+                      <div className="flex-1 space-y-1">
+                        <label className="text-cyan-400 hover:underline cursor-pointer font-bold text-xs inline-flex items-center gap-1.5">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Ganti File Foto Poster</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleEditBannerUpload}
+                            className="hidden"
+                          />
+                        </label>
+                        {isEditBannerUploading && (
+                          <p className="text-[10px] text-cyan-300 font-mono">Mengompres foto...</p>
+                        )}
+                        <p className="text-[10px] text-slate-400">Pilih foto dari galeri HP atau laptop untuk mengganti.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="checkbox"
+                      id="editBannerMainCheck"
+                      checked={editBannerIsMain}
+                      onChange={(e) => setEditBannerIsMain(e.target.checked)}
+                      className="rounded border-blue-900 text-cyan-500 focus:ring-cyan-400"
+                    />
+                    <label htmlFor="editBannerMainCheck" className="text-slate-300 text-xs cursor-pointer">
+                      Jadikan sebagai <strong>Poster Utama Aktif</strong> di beranda
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-3 border-t border-blue-900/60">
+                    <button
+                      type="button"
+                      onClick={() => setEditingBanner(null)}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isEditBannerUploading}
+                      className="px-5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg cursor-pointer shadow-md flex items-center gap-1.5"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Simpan Perubahan Poster</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1408,6 +1625,41 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Global In-App Confirmation Modal (Safe for Sandboxed Iframe) */}
+      {confirmModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#070f2c] border border-rose-500/70 rounded-2xl max-w-md w-full p-6 shadow-2xl text-xs space-y-4 animate-fade-in">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-950/80 border border-rose-500/50 text-rose-400 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-white font-bold text-sm">{confirmModal.title}</h4>
+                <p className="text-slate-300 text-xs mt-1.5 leading-relaxed">{confirmModal.message}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-blue-900/60">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg cursor-pointer transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAction}
+                className="px-5 py-2 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 text-white font-bold rounded-lg cursor-pointer shadow-lg shadow-rose-900/40 flex items-center gap-1.5 transition-all"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{confirmModal.confirmLabel || 'Ya, Lanjutkan'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

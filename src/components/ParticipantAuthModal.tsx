@@ -23,6 +23,8 @@ export const ParticipantAuthModal: React.FC<ParticipantAuthModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
 
+  const [formError, setFormError] = useState('');
+
   if (!isOpen) return null;
 
   // Check if entered phone or name is already in store
@@ -53,9 +55,10 @@ export const ParticipantAuthModal: React.FC<ParticipantAuthModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!phone.trim() || !name.trim()) {
-      alert('Nomor telepon dan nama wajib diisi!');
+      setFormError('Nomor telepon dan nama tim wajib diisi!');
       return;
     }
+    setFormError('');
 
     setIsSubmitting(true);
     setTimeout(() => {
@@ -155,6 +158,12 @@ export const ParticipantAuthModal: React.FC<ParticipantAuthModalProps> = ({
               <br />
               Jika nomor WhatsApp atau nama Anda sudah pernah didaftarkan sebelumnya, sistem akan otomatis login tanpa membuat akun ganda.
             </div>
+
+            {formError && (
+              <div className="bg-rose-950/80 border border-rose-600/80 rounded-xl p-3 text-[11px] text-rose-300 font-semibold animate-shake">
+                ⚠️ {formError}
+              </div>
+            )}
 
             {/* Detected existing user card */}
             {detectedUser && (

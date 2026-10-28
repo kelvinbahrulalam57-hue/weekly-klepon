@@ -640,6 +640,45 @@ class FirestoreEsportsStore {
     this.saveState();
   }
 
+  public updateBannerPoster(
+    bannerId: string,
+    data: {
+      title?: string;
+      imageUrl?: string;
+      caption?: string;
+      isMain?: boolean;
+    }
+  ): BannerPoster | null {
+    const idx = this.state.banners.findIndex((b) => b.id === bannerId);
+    if (idx === -1) return null;
+
+    if (data.isMain) {
+      this.state.banners = this.state.banners.map((b) => ({ ...b, isMain: false }));
+    }
+
+    const current = this.state.banners[idx];
+    const updated: BannerPoster = {
+      ...current,
+      title: data.title !== undefined ? data.title.trim() : current.title,
+      imageUrl: data.imageUrl !== undefined ? data.imageUrl : current.imageUrl,
+      caption: data.caption !== undefined ? data.caption : current.caption,
+      isMain: data.isMain !== undefined ? data.isMain : current.isMain,
+    };
+
+    this.state.banners[idx] = updated;
+
+    try {
+      setDoc(doc(db, 'banners', bannerId), updated, { merge: true }).catch((err) => {
+        console.warn('Banner update doc error:', err);
+      });
+    } catch {
+      // ignore
+    }
+
+    this.saveState();
+    return updated;
+  }
+
   public deleteBannerPoster(bannerId: string): void {
     this.state.banners = this.state.banners.filter((b) => b.id !== bannerId);
     if (!this.state.banners.some((b) => b.isMain) && this.state.banners.length > 0) {
@@ -975,16 +1014,33 @@ class FirestoreEsportsStore {
     const name = part?.name;
 
     this.state.participants = this.state.participants.filter((p) => p.id !== id);
-    this.state.players = this.state.players.filter((pl) => pl.id !== id && (!phone || pl.phone !== phone));
 
-    // Also remove their win reports
+    // Also remove from players list by id, phone, or name
+    const matchedPlayers = this.state.players.filter(
+      (pl) => pl.id === id || (phone && pl.phone === phone) || (name && pl.name.toLowerCase() === name.toLowerCase())
+    );
+    this.state.players = this.state.players.filter(
+      (pl) => pl.id !== id && (!phone || pl.phone !== phone) && (!name || pl.name.toLowerCase() !== name.toLowerCase())
+    );
+
+    matchedPlayers.forEach((pl) => {
+      deleteDoc(doc(db, 'players', pl.id)).catch(() => {});
+    });
+
+    // Also remove their win reports if any
     if (phone || name) {
+      const reportsToDelete = this.state.winReports.filter(
+        (r) => (phone ? r.phone === phone : false) || (name ? r.teamName.toLowerCase() === name.toLowerCase() : false)
+      );
       this.state.winReports = this.state.winReports.filter(
         (r) => (phone ? r.phone !== phone : true) && (name ? r.teamName.toLowerCase() !== name.toLowerCase() : true)
       );
+      reportsToDelete.forEach((r) => {
+        deleteDoc(doc(db, 'winReports', r.id)).catch(() => {});
+      });
     }
 
-    if (this.state.currentParticipant?.id === id) {
+    if (this.state.currentParticipant?.id === id || (phone && this.state.currentParticipant?.phone === phone)) {
       this.state.currentParticipant = null;
     }
 
@@ -999,28 +1055,82 @@ class FirestoreEsportsStore {
     data: { name?: string; phone?: string; points?: number; wins?: number; matchesPlayed?: number; photoUrl?: string }
   ): void {
     const pIdx = this.state.participants.findIndex((p) => p.id === id);
+    let oldPhone = '';
+    let oldName = '';
     if (pIdx !== -1) {
+      oldPhone = this.state.participants[pIdx].phone;
+      oldName = this.state.participants[pIdx].name;
       this.state.participants[pIdx] = {
         ...this.state.participants[pIdx],
         ...data,
       };
-      setDoc(doc(db, 'participants', id), this.state.participants[pIdx]).catch(() => {});
+      setDoc(doc(db, 'participants', id), this.state.participants[pIdx], { merge: true }).catch(() => {});
     }
 
-    const plIdx = this.state.players.findIndex((p) => p.id === id);
+    // Match player by ID, oldPhone, newPhone, or name
+    const plIdx = this.state.players.findIndex(
+      (p) =>
+        p.id === id ||
+        (oldPhone && p.phone === oldPhone) ||
+        (data.phone && p.phone === data.phone) ||
+        (oldName && p.name.toLowerCase() === oldName.toLowerCase())
+    );
+
     if (plIdx !== -1) {
       this.state.players[plIdx] = {
         ...this.state.players[plIdx],
         name: data.name ?? this.state.players[plIdx].name,
         captainName: data.name ?? this.state.players[plIdx].captainName,
         phone: data.phone ?? this.state.players[plIdx].phone,
-        points: data.points ?? this.state.players[plIdx].points,
-        wins: data.wins ?? this.state.players[plIdx].wins,
-        matchesPlayed: data.matchesPlayed ?? this.state.players[plIdx].matchesPlayed,
+        points: data.points !== undefined ? data.points : this.state.players[plIdx].points,
+        wins: data.wins !== undefined ? data.wins : this.state.players[plIdx].wins,
+        matchesPlayed: data.matchesPlayed !== undefined ? data.matchesPlayed : this.state.players[plIdx].matchesPlayed,
         photoUrl: data.photoUrl ?? this.state.players[plIdx].photoUrl,
         updatedAt: new Date().toISOString(),
       };
-      setDoc(doc(db, 'players', id), this.state.players[plIdx]).catch(() => {});
+      setDoc(doc(db, 'players', this.state.players[plIdx].id), this.state.players[plIdx], { merge: true }).catch(() => {});
+    } else if (pIdx !== -1) {
+      const p = this.state.participants[pIdx];
+      const newPlayer: PlayerTeam = {
+        id: p.id,
+        name: p.name,
+        tag: (p.name.trim().slice(0, 3) || 'FT').toUpperCase(),
+        captainName: p.name,
+        phone: p.phone,
+        points: p.points || 0,
+        wins: p.wins || 0,
+        matchesPlayed: p.matchesPlayed || 0,
+        game: 'Free Fire Clash Squad',
+        status: 'active',
+        photoUrl: p.photoUrl,
+        updatedAt: new Date().toISOString(),
+      };
+      this.state.players.push(newPlayer);
+      setDoc(doc(db, 'players', newPlayer.id), newPlayer, { merge: true }).catch(() => {});
+    }
+
+    // Update current participant if active
+    if (this.state.currentParticipant?.id === id || (oldPhone && this.state.currentParticipant?.phone === oldPhone)) {
+      this.state.currentParticipant = {
+        ...this.state.currentParticipant,
+        ...data,
+      };
+    }
+
+    // Update related win reports if name or phone changed
+    if ((data.phone && oldPhone && data.phone !== oldPhone) || (data.name && oldName && data.name !== oldName)) {
+      this.state.winReports = this.state.winReports.map((r) => {
+        if ((oldPhone && r.phone === oldPhone) || (oldName && r.teamName.toLowerCase() === oldName.toLowerCase())) {
+          const updatedRep = {
+            ...r,
+            phone: data.phone || r.phone,
+            teamName: data.name || r.teamName,
+          };
+          setDoc(doc(db, 'winReports', r.id), updatedRep, { merge: true }).catch(() => {});
+          return updatedRep;
+        }
+        return r;
+      });
     }
 
     this.saveState();
