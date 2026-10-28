@@ -3,10 +3,10 @@ import {
   Shield, CheckCircle, XCircle, Clock, Eye, Trophy, Users, AlertTriangle,
   RotateCcw, Save, ExternalLink, Search, Ban, Lock, LogOut, Check, Phone, ArrowLeft,
   MessageCircle, Send, Image as ImageIcon, Trash2, Plus, Sparkles, Upload, Edit2,
-  ShieldAlert, X
+  ShieldAlert, X, Gift
 } from 'lucide-react';
 import { esportsStore } from '../services/store';
-import { WinReport, ReportStatus, AdminContactInfo, PlayerTeam, BannerPoster, BlacklistEntry } from '../types/esports';
+import { WinReport, ReportStatus, AdminContactInfo, PlayerTeam, BannerPoster, BlacklistEntry, ParticipantUser, Season } from '../types/esports';
 import { compressImage } from '../utils/imageCompressor';
 
 interface AdminDashboardProps {
@@ -27,7 +27,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
 
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
-  const [activeTab, setActiveTab] = useState<'queue' | 'top10_broadcast' | 'teams' | 'banners' | 'blacklist' | 'contacts' | 'season'>('queue');
+  const [activeTab, setActiveTab] = useState<'queue' | 'top10_broadcast' | 'participants' | 'banners' | 'blacklist' | 'contacts' | 'season'>('queue');
   const [statusFilter, setStatusFilter] = useState<ReportStatus | 'ALL'>('PENDING');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedReport, setSelectedReport] = useState<WinReport | null>(null);
@@ -53,6 +53,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
   const [blEvidence, setBlEvidence] = useState('');
   const [editingBlEntry, setEditingBlEntry] = useState<BlacklistEntry | null>(null);
 
+  // Participant editing state
+  const [editingParticipant, setEditingParticipant] = useState<ParticipantUser | null>(null);
+  const [participantSearch, setParticipantSearch] = useState('');
+
   const isAdmin = esportsStore.isAdmin();
   const reports = esportsStore.getWinReports();
   const players = esportsStore.getPlayers();
@@ -61,13 +65,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
   const season = esportsStore.getSeason();
   const contacts = esportsStore.getContacts();
   const blacklist = esportsStore.getBlacklist();
+  const participants = esportsStore.getParticipants();
 
   const [contactForm, setContactForm] = useState<AdminContactInfo>(contacts);
+  const [seasonForm, setSeasonForm] = useState<Season>(season);
 
-  // Sync contactForm with live store updates
+  // Sync forms with live store updates
   useEffect(() => {
     setContactForm(contacts);
   }, [contacts.adminPhone, contacts.tiktokUrl, contacts.instagramUrl, contacts.infoChannelLink]);
+
+  useEffect(() => {
+    setSeasonForm(season);
+  }, [season.totalPrizePool, season.firstPrize, season.secondPrize, season.thirdPrize]);
 
   const totalReports = reports.length;
   const pendingCount = reports.filter((r) => r.status === 'PENDING').length;
@@ -90,55 +100,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
     if (success) {
       setPasswordError(false);
       setPasswordInput('');
-      onNotify('Login Admin Panitia Berhasil!');
+      onNotify('Akses Panitia Diterima. Selamat datang di Dashboard Pengaturan.');
     } else {
       setPasswordError(true);
     }
   };
 
-  const handleLogout = () => {
-    esportsStore.logoutAdmin();
-    onNotify('Admin berhasil keluar.');
-    onBackToPortal();
-  };
-
-  const handleApprove = (report: WinReport) => {
-    esportsStore.approveWinReport(report.id, 'Panitia KLEPON FT');
-    onNotify(`Storan ${report.teamName} DI-APPROVE! +1 Poin otomatis masuk ke klasemen kualifikasi.`);
-    setSelectedReport(null);
-  };
-
-  const handleRejectConfirm = () => {
-    if (!selectedReport) return;
-    const reason = rejectReason.trim() || 'Foto stiker DONE tidak valid / tidak ditemukan pada riwayat chat GB admin.';
-    esportsStore.rejectWinReport(selectedReport.id, reason, 'Panitia KLEPON FT');
-    onNotify(`Storan ${selectedReport.teamName} DITOLAK. Alasan: ${reason}`);
-    setShowRejectDialog(false);
-    setSelectedReport(null);
-    setRejectReason('');
-  };
-
-  const handleBlacklistFromReport = (report: WinReport) => {
-    const reason = prompt('Masukkan alasan blacklist tim ini:', 'Memalsukan screenshot stiker DONE/CEK admin di grup GB');
-    if (reason) {
-      esportsStore.blacklistTeam(
-        report.teamName,
-        report.phone,
-        reason,
-        'BAN PERMANEN SELURUH EVENT & KICK DARI SALURAN FT',
-        `Bukti foto stiker palsu diajukan tgl ${report.storanDate}`
-      );
-      esportsStore.rejectWinReport(report.id, `BLACKLISTED: ${reason}`, 'Panitia KLEPON FT');
-      onNotify(`Tim ${report.teamName} (${report.phone}) resmi dimasukkan ke Wall of Shame Blacklist!`);
-      setSelectedReport(null);
+  const handleApproveReport = (report: WinReport) => {
+    const ok = esportsStore.approveWinReport(report.id, 'Panitia KLEPON FT');
+    if (ok) {
+      onNotify(`Storan kemenangan untuk ${report.teamName} disetujui! +1 Poin otomatis masuk ke klasemen kualifikasi.`);
+      if (selectedReport?.id === report.id) {
+        setSelectedReport(null);
+      }
     }
   };
 
-  const handleChatTop10 = (player: PlayerTeam, rank: number) => {
-    const url = esportsStore.getTop10InviteLink(player, rank);
-    window.open(url, '_blank');
-    setContactedTeams((prev) => ({ ...prev, [player.id]: true }));
-    onNotify(`Membuka WhatsApp untuk mengundang ${player.name} (Rank #${rank}) ke Grup Khusus Turnamen Mingguan.`);
+  const handleRejectReport = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedReport) return;
+    if (!rejectReason.trim()) {
+      alert('Alasan penolakan wajib diisi untuk edukasi tim!');
+      return;
+    }
+
+    esportsStore.rejectWinReport(selectedReport.id, rejectReason.trim(), 'Panitia KLEPON FT');
+    onNotify(`Storan untuk ${selectedReport.teamName} ditolak. Status berubah menjadi 'Rejected'.`);
+    setSelectedReport(null);
+    setShowRejectDialog(false);
+    setRejectReason('');
   };
 
   const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -146,10 +136,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
     if (file) {
       setIsBannerUploading(true);
       try {
-        const compressed = await compressImage(file, 1000, 1000, 0.75);
+        const compressed = await compressImage(file, 1280, 1280, 0.8);
         setBannerImage(compressed);
+        onNotify('Foto poster dari galeri berhasil dikompres dan siap disimpan.');
       } catch (err) {
-        console.error('Banner upload error:', err);
+        console.error(err);
       } finally {
         setIsBannerUploading(false);
       }
@@ -159,7 +150,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
   const handleBannerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!bannerTitle.trim() || !bannerImage) {
-      alert('Harap masukkan judul poster dan pilih foto pamflet dari galeri!');
+      alert('Judul poster dan file foto dari galeri wajib diisi!');
       return;
     }
 
@@ -168,1457 +159,1258 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
       imageUrl: bannerImage,
       caption: bannerCaption.trim(),
       isMain: bannerSetAsMain,
-      uploadedBy: 'Admin Panitia',
+      uploadedBy: 'Panitia KLEPON FT',
     });
 
-    onNotify(`Poster "${bannerTitle}" berhasil diunggah & tersinkronisasi realtime!`);
+    onNotify('Poster turnamen baru berhasil diterapkan secara realtime!');
     setBannerTitle('');
     setBannerCaption('');
     setBannerImage('');
     setBannerSetAsMain(false);
   };
 
-  const handleDeleteBanner = (banner: BannerPoster) => {
-    if (confirm(`Yakin ingin menghapus poster "${banner.title}"?`)) {
-      esportsStore.deleteBannerPoster(banner.id);
-      onNotify(`Poster "${banner.title}" berhasil dihapus.`);
-    }
-  };
-
-  const handleSetMainBanner = (banner: BannerPoster) => {
-    esportsStore.setMainBanner(banner.id);
-    onNotify(`Poster "${banner.title}" sekarang aktif sebagai banner utama website.`);
-  };
-
   const handleSaveContacts = (e: React.FormEvent) => {
     e.preventDefault();
     esportsStore.updateContacts(contactForm);
-    onNotify('Pengaturan sosial media (TikTok, Instagram) & WhatsApp berhasil diperbarui dan tersinkron realtime!');
+    onNotify('Pengaturan sosial media (TikTok, IG, WA) berhasil disimpan dan langsung realtime ke seluruh pengunjung!');
+  };
+
+  const handleSaveSeason = (e: React.FormEvent) => {
+    e.preventDefault();
+    esportsStore.updateSeason({
+      totalPrizePool: seasonForm.totalPrizePool,
+      firstPrize: seasonForm.firstPrize,
+      secondPrize: seasonForm.secondPrize,
+      thirdPrize: seasonForm.thirdPrize,
+    });
+    onNotify('Pengaturan hadiah turnamen berhasil disimpan!');
+  };
+
+  const handleResetSeason = () => {
+    if (confirm('PERINGATAN: Apakah Anda yakin ingin meriset seluruh poin klasemen turnamen mingguan ke 0 untuk membuka putaran baru?')) {
+      esportsStore.manualResetSeason();
+      onNotify('Klasemen turnamen mingguan berhasil direset ke 0!');
+    }
+  };
+
+  const handleDeleteParticipant = (part: ParticipantUser) => {
+    if (confirm(`HAPUS PESERTA: Apakah Anda yakin ingin menghapus tim "${part.name}" (${part.phone}) dari database turnamen? Data poin dan storan kemenangan tim ini akan dihapus permanen.`)) {
+      esportsStore.deleteParticipant(part.id);
+      onNotify(`Peserta "${part.name}" berhasil dihapus dari database.`);
+    }
+  };
+
+  const handleSaveEditParticipant = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingParticipant) return;
+    esportsStore.updateParticipant(editingParticipant.id, {
+      name: editingParticipant.name,
+      phone: editingParticipant.phone,
+      points: Number(editingParticipant.points) || 0,
+      wins: Number(editingParticipant.wins) || 0,
+      matchesPlayed: Number(editingParticipant.matchesPlayed) || 0,
+    });
+    onNotify(`Data peserta "${editingParticipant.name}" berhasil diperbarui!`);
+    setEditingParticipant(null);
   };
 
   const handleAddBlacklist = (e: React.FormEvent) => {
     e.preventDefault();
     if (!blTeamName.trim() || !blPhone.trim() || !blReason.trim()) {
-      alert('Harap isi Nama Tim, Nomor WhatsApp, dan Alasan Blacklist!');
+      alert('Nama tim, no hp, dan alasan sanksi wajib diisi!');
       return;
     }
+
     esportsStore.addBlacklistEntry({
       teamName: blTeamName.trim(),
       captainName: blCaptainName.trim() || blTeamName.trim(),
       phone: blPhone.trim(),
       reason: blReason.trim(),
-      penalty: blPenalty.trim() || 'BAN PERMANEN SELURUH EVENT & KICK DARI SALURAN FT',
-      evidenceSummary: blEvidence.trim() || 'Terbukti melanggar integritas turnamen (bukti palsu).',
+      penalty: blPenalty.trim(),
+      evidenceSummary: blEvidence.trim() || 'Hasil investigasi chat GB membuktikan stiker palsu.',
     });
-    onNotify(`Tim ${blTeamName} berhasil ditambahkan ke daftar Blacklist & tersinkron Firestore!`);
+
+    onNotify(`Sanksi resmi untuk ${blTeamName} berhasil diterbitkan & tersinkron ke database Firestore.`);
     setBlTeamName('');
     setBlCaptainName('');
     setBlPhone('');
     setBlReason('');
-    setBlPenalty('BAN PERMANEN SELURUH EVENT & KICK DARI SALURAN FT');
     setBlEvidence('');
     setShowAddBlForm(false);
-  };
-
-  const handleDeleteBlacklist = (entry: BlacklistEntry) => {
-    if (confirm(`Hapus tim "${entry.teamName}" (${entry.phone}) dari daftar Blacklist? Tim ini akan dapat berpartisipasi kembali.`)) {
-      esportsStore.deleteBlacklistEntry(entry.id);
-      onNotify(`Tim "${entry.teamName}" berhasil dihapus dari Blacklist.`);
-    }
   };
 
   const handleSaveEditBlacklist = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingBlEntry) return;
+
     esportsStore.updateBlacklistEntry(editingBlEntry.id, {
-      teamName: editingBlEntry.teamName.trim(),
-      captainName: editingBlEntry.captainName.trim(),
-      phone: editingBlEntry.phone.trim(),
-      reason: editingBlEntry.reason.trim(),
-      penalty: editingBlEntry.penalty.trim(),
-      evidenceSummary: editingBlEntry.evidenceSummary.trim(),
+      teamName: editingBlEntry.teamName,
+      captainName: editingBlEntry.captainName,
+      phone: editingBlEntry.phone,
+      reason: editingBlEntry.reason,
+      penalty: editingBlEntry.penalty,
+      evidenceSummary: editingBlEntry.evidenceSummary,
     });
-    onNotify(`Data blacklist "${editingBlEntry.teamName}" berhasil diperbarui!`);
+
+    onNotify(`Data blacklist ${editingBlEntry.teamName} berhasil diperbarui.`);
     setEditingBlEntry(null);
   };
 
-  const handleResetSeason = () => {
-    if (confirm(`Yakin ingin mereset klasemen untuk ${season.name}? Season Week ${season.weekNumber + 1} akan dibuat otomatis dan poin direset ke 0.`)) {
-      esportsStore.manualResetSeason();
-      onNotify('Klasemen berhasil direset! Season baru telah aktif.');
+  const handleDeleteBlacklist = (entry: BlacklistEntry) => {
+    if (confirm(`Apakah Anda yakin ingin mencabut sanksi dan menghapus ${entry.teamName} dari daftar blacklist?`)) {
+      esportsStore.deleteBlacklistEntry(entry.id);
+      onNotify(`Sanksi untuk ${entry.teamName} berhasil dicabut.`);
     }
   };
 
-  // If not logged in as Admin, show secret password-only prompt (No keyboard shortcut shown)
+  // Stealth Unauthenticated Screen
   if (!isAdmin) {
     return (
-      <div className="py-20 px-4 bg-[#080c14] min-h-[75vh] flex items-center justify-center">
-        <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-sm w-full p-8 shadow-2xl relative text-xs">
-          <button
-            onClick={onBackToPortal}
-            className="text-slate-400 hover:text-white flex items-center gap-1.5 mb-6 cursor-pointer"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Kembali ke Website Peserta</span>
-          </button>
-
-          <div className="w-12 h-12 rounded bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 mx-auto mb-4">
+      <div className="min-h-[80vh] flex items-center justify-center p-4 bg-[#040817]">
+        <div className="bg-[#070e28] border border-blue-900/60 rounded-2xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl space-y-4">
+          <div className="w-12 h-12 rounded-xl bg-blue-950/80 border border-cyan-500/30 text-cyan-400 flex items-center justify-center mx-auto">
             <Lock className="w-6 h-6" />
           </div>
+          <div>
+            <h3 className="text-sm font-bold tracking-wider uppercase text-white font-mono">
+              Autentikasi Diperlukan
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Halaman ini memerlukan otentikasi kode sandi panitia.
+            </p>
+          </div>
 
-          <h2 className="text-lg font-bold font-display uppercase text-white text-center mb-1">
-            Panel Panitia Tersembunyi
-          </h2>
-          <p className="text-[11px] text-slate-400 text-center mb-6">
-            KLEPON WEEKLY TURNAMENT FREE
-          </p>
-
-          <form onSubmit={handlePasswordLogin} className="space-y-4">
-            <div>
-              <label className="block text-slate-300 font-semibold mb-1">Password Admin</label>
-              <input
-                type="password"
-                required
-                autoFocus
-                placeholder="Masukkan password admin"
-                value={passwordInput}
-                onChange={(e) => {
-                  setPasswordInput(e.target.value);
-                  setPasswordError(false);
-                }}
-                className={`w-full bg-slate-950 border ${
-                  passwordError ? 'border-rose-500' : 'border-slate-800'
-                } rounded px-3 py-2 text-white font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500 text-sm`}
-              />
-              {passwordError && (
-                <p className="text-rose-400 text-[10px] mt-1 font-mono">
-                  Password salah! Silakan coba lagi.
-                </p>
-              )}
-            </div>
-
+          <form onSubmit={handlePasswordLogin} className="space-y-3 pt-2">
+            <input
+              type="password"
+              placeholder="••••••••••••"
+              value={passwordInput}
+              onChange={(e) => {
+                setPasswordInput(e.target.value);
+                setPasswordError(false);
+              }}
+              className="w-full bg-[#030614] border border-blue-900/60 focus:border-cyan-400 rounded-lg px-3 py-2 text-white font-mono text-center tracking-widest text-xs focus:outline-none"
+            />
+            {passwordError && (
+              <p className="text-rose-400 text-[11px] font-mono">Kode sandi salah. Silakan coba lagi.</p>
+            )}
             <button
               type="submit"
-              className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded shadow-lg shadow-emerald-500/20 transition-all cursor-pointer text-xs uppercase tracking-wider"
+              className="w-full py-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-slate-950 font-bold rounded-lg text-xs cursor-pointer shadow-lg shadow-cyan-500/20"
             >
-              Buka Dashboard Panitia
+              Masuk Dashboard
             </button>
           </form>
+
+          <div className="pt-2">
+            <button
+              onClick={onBackToPortal}
+              className="text-xs text-slate-400 hover:text-white flex items-center gap-1 mx-auto cursor-pointer"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Kembali ke Website</span>
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
+  const filteredParticipants = participants.filter((p) => {
+    const q = participantSearch.toLowerCase();
+    return (
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.phone || '').includes(participantSearch)
+    );
+  });
+
   return (
-    <div className="bg-[#080c14] py-8 lg:py-12 border-b border-slate-800/80">
-      <div className="max-w-7xl mx-auto px-4 lg:px-8">
-        {/* Admin Header Bar */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 mb-8 border-b border-slate-800">
+    <div className="py-8 px-4 lg:px-8 max-w-7xl mx-auto space-y-6 bg-[#040817] min-h-screen text-slate-100">
+      {/* Top Header Bar */}
+      <div className="bg-[#070f2c]/90 border border-blue-900/60 rounded-2xl p-5 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-slate-950 font-bold shadow-lg shadow-cyan-500/20">
+            <Shield className="w-5 h-5" />
+          </div>
           <div>
-            <div className="flex items-center gap-2 text-xs font-mono text-emerald-400 mb-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>PANEL ADMIN · KLEPON WEEKLY TURNAMENT FREE</span>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-black font-display uppercase tracking-wide text-white">
+                Dashboard Kontrol Panitia
+              </h2>
+              <span className="bg-cyan-400 text-slate-950 px-2 py-0.5 rounded font-mono text-[10px] font-black uppercase">
+                Realtime Firestore
+              </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black font-display uppercase text-white tracking-tight">
-              Dashboard Verifikasi Stiker DONE & Top 10
-            </h1>
-            <div className="text-xs text-slate-400 mt-0.5">
-              Season: <span className="text-white font-mono font-bold">{season.name}</span> · Reset Otomatis: <span className="text-emerald-400 font-mono">{season.endDate} (23:59 WIB)</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onBackToPortal}
-              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-xs font-semibold transition-colors cursor-pointer"
-            >
-              Lihat Portal Pemain
-            </button>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950 hover:bg-rose-900 border border-rose-500/40 rounded text-xs text-rose-300 transition-colors cursor-pointer"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Keluar</span>
-            </button>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Edit peserta, poster, sosmed, verifikasi bukti stiker DONE di GB, dan reset klasemen turnamen.
+            </p>
           </div>
         </div>
 
-        {/* 5 KPI Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-8">
-          <div className="bg-slate-900 border border-slate-800 p-3.5 rounded">
-            <div className="text-xs text-slate-400 flex items-center justify-between">
-              <span>Total Storan</span>
-              <Shield className="w-3.5 h-3.5 text-slate-400" />
-            </div>
-            <div className="text-2xl font-black font-mono tabular-nums text-white mt-1">
-              {totalReports}
-            </div>
-          </div>
-
-          <div className="bg-slate-900 border border-amber-500/30 p-3.5 rounded">
-            <div className="text-xs text-amber-400 flex items-center justify-between">
-              <span>Perlu Cek (PENDING)</span>
-              <Clock className="w-3.5 h-3.5 text-amber-400" />
-            </div>
-            <div className="text-2xl font-black font-mono tabular-nums text-amber-400 mt-1">
-              {pendingCount}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-0.5 font-mono">FOTO STIKER DONE</div>
-          </div>
-
-          <div className="bg-slate-900 border border-emerald-500/30 p-3.5 rounded">
-            <div className="text-xs text-emerald-400 flex items-center justify-between">
-              <span>Disetujui (+1 Poin)</span>
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-            </div>
-            <div className="text-2xl font-black font-mono tabular-nums text-emerald-400 mt-1">
-              {doneCount}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-0.5 font-mono">POIN MASUK</div>
-          </div>
-
-          <div className="bg-slate-900 border border-rose-500/30 p-3.5 rounded">
-            <div className="text-xs text-rose-400 flex items-center justify-between">
-              <span>Ditolak / Palsu</span>
-              <XCircle className="w-3.5 h-3.5 text-rose-400" />
-            </div>
-            <div className="text-2xl font-black font-mono tabular-nums text-rose-400 mt-1">
-              {rejectedCount}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-0.5 font-mono">BUKTI INVALID</div>
-          </div>
-
-          <div className="bg-slate-900 border border-teal-500/30 p-3.5 rounded">
-            <div className="text-xs text-teal-400 flex items-center justify-between">
-              <span>Lolos Top 10</span>
-              <Trophy className="w-3.5 h-3.5 text-teal-400" />
-            </div>
-            <div className="text-2xl font-black font-mono tabular-nums text-teal-400 mt-1">
-              {top10Players.length}
-            </div>
-            <div className="text-[10px] text-slate-400 mt-0.5 font-mono">MASUK BAGAN 30K</div>
-          </div>
-        </div>
-
-        {/* Tab Controls */}
-        <div className="flex items-center gap-1 p-1 bg-slate-950 border border-slate-800 rounded-lg mb-6 overflow-x-auto">
+        <div className="flex items-center gap-2.5">
           <button
-            onClick={() => setActiveTab('queue')}
-            className={`px-4 py-2 text-xs font-bold rounded whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'queue' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
+            onClick={onBackToPortal}
+            className="px-3.5 py-2 bg-[#0a1438] hover:bg-[#0f1f54] text-cyan-400 border border-cyan-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
           >
-            <Clock className="w-3.5 h-3.5" />
-            <span>Antrean Storan Stiker DONE ({pendingCount})</span>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Ke Tampilan Website</span>
           </button>
-
           <button
-            onClick={() => setActiveTab('top10_broadcast')}
-            className={`px-4 py-2 text-xs font-bold rounded whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'top10_broadcast' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
+            onClick={() => {
+              esportsStore.logoutAdmin();
+              onBackToPortal();
+              onNotify('Anda telah keluar dari mode panitia.');
+            }}
+            className="px-3 py-2 bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-500/40 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-all"
+            title="Keluar Sesi Panitia"
           >
-            <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Broadcast WA Top 10 Bagan</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('teams')}
-            className={`px-4 py-2 text-xs font-bold rounded whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'teams' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Seluruh Peserta ({players.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('blacklist')}
-            className={`px-4 py-2 text-xs font-bold rounded whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'blacklist' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Ban className="w-3.5 h-3.5" />
-            <span>Blacklist ({blacklist.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('banners')}
-            className={`px-4 py-2 text-xs font-bold rounded whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'banners' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <ImageIcon className="w-3.5 h-3.5" />
-            <span>Kelola Banner & Poster ({banners.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('contacts')}
-            className={`px-4 py-2 text-xs font-bold rounded whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'contacts' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Phone className="w-3.5 h-3.5" />
-            <span>Kontak Saluran & Konsultasi</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('season')}
-            className={`px-4 py-2 text-xs font-bold rounded whitespace-nowrap transition-colors cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'season' ? 'bg-emerald-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Klasemen Otomatis / Manual</span>
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Keluar</span>
           </button>
         </div>
+      </div>
 
-        {/* TAB 1: Antrean Verifikasi Storan */}
-        {activeTab === 'queue' && (
-          <div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <div className="flex items-center gap-1 bg-slate-900 p-1 border border-slate-800 rounded">
-                <button
-                  onClick={() => setStatusFilter('PENDING')}
-                  className={`px-3 py-1 text-xs font-semibold rounded cursor-pointer ${
-                    statusFilter === 'PENDING'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  PENDING ({pendingCount})
-                </button>
-                <button
-                  onClick={() => setStatusFilter('DONE')}
-                  className={`px-3 py-1 text-xs font-semibold rounded cursor-pointer ${
-                    statusFilter === 'DONE'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  DONE ({doneCount})
-                </button>
-                <button
-                  onClick={() => setStatusFilter('REJECTED')}
-                  className={`px-3 py-1 text-xs font-semibold rounded cursor-pointer ${
-                    statusFilter === 'REJECTED'
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  REJECTED ({rejectedCount})
-                </button>
-                <button
-                  onClick={() => setStatusFilter('ALL')}
-                  className={`px-3 py-1 text-xs font-semibold rounded cursor-pointer ${
-                    statusFilter === 'ALL'
-                      ? 'bg-slate-800 text-white'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  SEMUA ({totalReports})
-                </button>
-              </div>
+      {/* Navigation Tabs */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-blue-900/50 pb-3 text-xs">
+        <button
+          onClick={() => setActiveTab('queue')}
+          className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'queue'
+              ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-md shadow-cyan-500/20'
+              : 'bg-[#070e28] text-slate-300 hover:bg-[#0a153c] border border-blue-900/50'
+          }`}
+        >
+          <Clock className="w-4 h-4" />
+          <span>Antrean Storan</span>
+          <span className="font-mono px-1.5 py-0.2 rounded text-[10px] bg-black/40">
+            {pendingCount}
+          </span>
+        </button>
 
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                  type="text"
-                  placeholder="Cari Tim / No WhatsApp..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 pr-3 py-1.5 bg-slate-900 border border-slate-800 rounded text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 w-52 font-mono"
-                />
-              </div>
+        <button
+          onClick={() => setActiveTab('top10_broadcast')}
+          className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'top10_broadcast'
+              ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-md shadow-cyan-500/20'
+              : 'bg-[#070e28] text-slate-300 hover:bg-[#0a153c] border border-blue-900/50'
+          }`}
+        >
+          <Trophy className="w-4 h-4" />
+          <span>Broadcast WA Top 10</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('participants')}
+          className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'participants'
+              ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-md shadow-cyan-500/20'
+              : 'bg-[#070e28] text-slate-300 hover:bg-[#0a153c] border border-blue-900/50'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>Kelola & Hapus Peserta ({participants.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('banners')}
+          className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'banners'
+              ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-md shadow-cyan-500/20'
+              : 'bg-[#070e28] text-slate-300 hover:bg-[#0a153c] border border-blue-900/50'
+          }`}
+        >
+          <ImageIcon className="w-4 h-4" />
+          <span>Kelola Poster ({banners.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('blacklist')}
+          className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'blacklist'
+              ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-md shadow-cyan-500/20'
+              : 'bg-[#070e28] text-slate-300 hover:bg-[#0a153c] border border-blue-900/50'
+          }`}
+        >
+          <Ban className="w-4 h-4" />
+          <span>Daftar Blacklist ({blacklist.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('contacts')}
+          className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'contacts'
+              ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-md shadow-cyan-500/20'
+              : 'bg-[#070e28] text-slate-300 hover:bg-[#0a153c] border border-blue-900/50'
+          }`}
+        >
+          <MessageCircle className="w-4 h-4" />
+          <span>Sosmed & Kontak</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('season')}
+          className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'season'
+              ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-md shadow-cyan-500/20'
+              : 'bg-[#070e28] text-slate-300 hover:bg-[#0a153c] border border-blue-900/50'
+          }`}
+        >
+          <RotateCcw className="w-4 h-4" />
+          <span>Hadiah & Reset Klasemen</span>
+        </button>
+      </div>
+
+      {/* TAB 1: Antrean Storan */}
+      {activeTab === 'queue' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              {(['PENDING', 'DONE', 'REJECTED', 'ALL'] as const).map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setStatusFilter(st)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                    statusFilter === st
+                      ? 'bg-cyan-400 text-slate-950 shadow'
+                      : 'bg-[#070e28] text-slate-400 hover:text-white border border-blue-900/50'
+                  }`}
+                >
+                  {st === 'PENDING' ? `Under Review (${pendingCount})` : st === 'DONE' ? `Verified (${doneCount})` : st === 'REJECTED' ? `Rejected (${rejectedCount})` : `Semua (${totalReports})`}
+                </button>
+              ))}
             </div>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden shadow-xl">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-800 bg-slate-950 text-xs font-mono uppercase text-slate-400">
-                      <th className="py-3 px-4">Nama Tim & No WhatsApp</th>
-                      <th className="py-3 px-4">Sesi Match / Pot FT</th>
-                      <th className="py-3 px-4">Tgl & Jam Storan</th>
-                      <th className="py-3 px-4 text-center">Status</th>
-                      <th className="py-3 px-4 text-center">Foto Stiker DONE di GB</th>
-                      <th className="py-3 px-4 text-right">Aksi Verifikasi</th>
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                placeholder="Cari nama tim / no wa..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-[#070e28] border border-blue-900/60 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="bg-[#070f2c]/90 border border-blue-900/60 rounded-2xl overflow-hidden shadow-2xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-blue-900/50 bg-[#030616] text-[11px] font-mono uppercase text-slate-400">
+                    <th className="py-3.5 px-4">Waktu Setor</th>
+                    <th className="py-3.5 px-4">Tim & No WA</th>
+                    <th className="py-3.5 px-4">Sesi Match FT</th>
+                    <th className="py-3.5 px-4">Bukti Stiker DONE di GB</th>
+                    <th className="py-3.5 px-4 text-center">Status</th>
+                    <th className="py-3.5 px-4 text-center">Aksi Verifikasi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-blue-950/60">
+                  {filteredReports.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-slate-500">
+                        Tidak ada antrean storan dalam filter ini.
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 text-xs">
-                    {filteredReports.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-12 text-center text-slate-400">
-                          Tidak ada data storan dalam status ini.
+                  ) : (
+                    filteredReports.map((report) => (
+                      <tr key={report.id} className="hover:bg-blue-950/30 transition-colors">
+                        <td className="py-3.5 px-4 font-mono text-slate-400">
+                          {report.storanDate}
                         </td>
-                      </tr>
-                    ) : (
-                      filteredReports.map((report) => (
-                        <tr key={report.id} className="hover:bg-slate-800/40 transition-colors">
-                          <td className="py-3 px-4">
-                            <div className="font-bold text-white">{report.teamName}</div>
-                            <a
-                              href={`https://wa.me/${report.phone.startsWith('0') ? '62' + report.phone.slice(1) : report.phone}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-emerald-400 font-mono text-[11px] flex items-center gap-1 hover:underline"
-                            >
-                              <Phone className="w-3 h-3" />
-                              <span>{report.phone}</span>
-                            </a>
-                          </td>
-
-                          <td className="py-3 px-4 text-slate-300">
-                            {report.potName || 'Fast Tournament CS'}
-                          </td>
-
-                          <td className="py-3 px-4 font-mono text-slate-300">
-                            <div>{report.storanDate}</div>
-                            <div className="text-[10px] text-slate-500">
-                              Submit: {new Date(report.submittedAt).toLocaleTimeString('id-ID')}
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-white text-sm">{report.teamName}</div>
+                          <div className="text-[11px] font-mono text-cyan-400 flex items-center gap-1 mt-0.5">
+                            <Phone className="w-3 h-3 text-cyan-400" />
+                            <span>{report.phone}</span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 font-mono text-slate-300">
+                          {report.potName || 'Fast Tournament FF'}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div
+                            onClick={() => setSelectedReport(report)}
+                            className="flex items-center gap-2 cursor-pointer group"
+                          >
+                            <img
+                              src={report.screenshotUrl}
+                              alt="Bukti Stiker DONE"
+                              className="w-12 h-12 object-cover rounded-lg border border-blue-900 group-hover:border-cyan-400 transition-colors"
+                            />
+                            <div className="text-[11px] text-cyan-400 group-hover:underline flex items-center gap-1 font-mono">
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Inspeksi</span>
                             </div>
-                          </td>
-
-                          <td className="py-3 px-4 text-center">
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          {report.status === 'PENDING' ? (
+                            <span className="px-2.5 py-1 bg-amber-950/80 border border-amber-500/50 text-amber-300 font-mono text-[10px] font-bold rounded-full animate-pulse">
+                              Under Review
+                            </span>
+                          ) : report.status === 'DONE' ? (
+                            <span className="px-2.5 py-1 bg-cyan-950/80 border border-cyan-400/50 text-cyan-300 font-mono text-[10px] font-bold rounded-full">
+                              Verified (+1 Pts)
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 bg-rose-950/80 border border-rose-500/50 text-rose-300 font-mono text-[10px] font-bold rounded-full">
+                              Rejected
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
                             {report.status === 'PENDING' && (
-                              <span className="inline-block px-2.5 py-1 bg-amber-500/10 border border-amber-500/40 text-amber-300 font-bold rounded text-[10px]">
-                                PENDING
-                              </span>
-                            )}
-                            {report.status === 'DONE' && (
-                              <span className="inline-block px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/40 text-emerald-400 font-bold rounded text-[10px]">
-                                DONE (+1 POIN)
-                              </span>
-                            )}
-                            {report.status === 'REJECTED' && (
-                              <span className="inline-block px-2.5 py-1 bg-rose-500/10 border border-rose-500/40 text-rose-400 font-bold rounded text-[10px]">
-                                REJECTED
-                              </span>
-                            )}
-                          </td>
-
-                          <td className="py-3 px-4 text-center">
-                            <button
-                              onClick={() => setSelectedReport(report)}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[11px] font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer"
-                            >
-                              <Eye className="w-3.5 h-3.5 text-teal-400" />
-                              <span>Lihat Chat GB</span>
-                            </button>
-                          </td>
-
-                          <td className="py-3 px-4 text-right">
-                            {report.status === 'PENDING' ? (
-                              <div className="flex items-center justify-end gap-1.5">
+                              <>
                                 <button
-                                  onClick={() => handleApprove(report)}
-                                  className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded text-[11px] transition-colors cursor-pointer"
-                                  title="Approve & Tambahkan +1 Poin Otomatis"
+                                  onClick={() => handleApproveReport(report)}
+                                  className="px-2.5 py-1 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold rounded text-xs flex items-center gap-1 cursor-pointer shadow-md"
+                                  title="Sahkan Bukti & Tambahkan +1 Poin"
                                 >
-                                  Approve (+1)
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Sah</span>
                                 </button>
                                 <button
                                   onClick={() => {
                                     setSelectedReport(report);
                                     setShowRejectDialog(true);
                                   }}
-                                  className="px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded text-[11px] transition-colors cursor-pointer"
-                                  title="Tolak Bukti"
+                                  className="px-2.5 py-1 bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-300 font-bold rounded text-xs flex items-center gap-1 cursor-pointer"
+                                  title="Tolak Storan Kemenangan"
                                 >
-                                  Tolak
+                                  <X className="w-3.5 h-3.5" />
+                                  <span>Tolak</span>
                                 </button>
-                              </div>
-                            ) : (
+                              </>
+                            )}
+                            {report.status !== 'PENDING' && (
                               <button
                                 onClick={() => setSelectedReport(report)}
-                                className="text-slate-400 hover:text-white text-[11px] underline cursor-pointer"
+                                className="px-2.5 py-1 bg-[#070e28] hover:bg-[#0a153c] border border-blue-900 text-slate-300 rounded text-xs cursor-pointer"
                               >
-                                Detail Audit
+                                Detail
                               </button>
                             )}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: Broadcast WA Top 10 Lolos Bagan Mingguan */}
-        {activeTab === 'top10_broadcast' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-              <div>
-                <h3 className="text-lg font-bold uppercase font-display text-white flex items-center gap-2">
-                  <MessageCircle className="w-5 h-5 text-emerald-400" />
-                  <span>Daftar 10 Tim Teratas yang Lolos ke Turnamen Mingguan</span>
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Klik tombol <strong>Chat WA & Kirim Link Grup Khusus</strong> untuk mengundang kapten tim ke grup khusus turnamen mingguan sistem bagan gugur.
-                </p>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-slate-800 text-slate-400 font-mono uppercase bg-slate-950">
-                    <th className="py-2.5 px-3">Peringkat</th>
-                    <th className="py-2.5 px-3">Nama Tim</th>
-                    <th className="py-2.5 px-3">Nomor WhatsApp Terdaftar</th>
-                    <th className="py-2.5 px-3 text-center">Poin Kualifikasi</th>
-                    <th className="py-2.5 px-3 text-center">Status Hubungi</th>
-                    <th className="py-2.5 px-3 text-right">Aksi WhatsApp</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {top10Players.map((player, idx) => {
-                    const rank = idx + 1;
-                    const isContacted = contactedTeams[player.id];
-
-                    return (
-                      <tr key={player.id} className="hover:bg-slate-800/30">
-                        <td className="py-2.5 px-3 font-mono font-bold text-emerald-400">
-                          #{rank}
-                        </td>
-                        <td className="py-2.5 px-3 font-bold text-white">
-                          {player.name}
-                        </td>
-                        <td className="py-2.5 px-3 font-mono text-slate-200">
-                          {player.phone}
-                        </td>
-                        <td className="py-2.5 px-3 text-center font-mono font-bold text-amber-300">
-                          {player.points} PTS ({player.wins} Win)
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          {isContacted ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/30">
-                              <Check className="w-3 h-3" />
-                              Sudah Dikontak
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-amber-400 font-mono">
-                              Belum Dikontak
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 text-right">
-                          <button
-                            onClick={() => handleChatTop10(player, rank)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded text-xs transition-colors cursor-pointer shadow-md shadow-emerald-500/20"
-                          >
-                            <Send className="w-3 h-3" />
-                            <span>Chat WA & Masukkan Grup Khusus</span>
-                          </button>
+                          </div>
                         </td>
                       </tr>
-                    );
-                  })}
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* TAB 3: Seluruh Peserta */}
-        {activeTab === 'teams' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-            <h3 className="text-lg font-bold uppercase font-display text-white mb-2">
-              Seluruh Peserta Terdaftar ({players.length} Tim)
+      {/* TAB 2: Broadcast WA Top 10 */}
+      {activeTab === 'top10_broadcast' && (
+        <div className="space-y-4">
+          <div className="bg-[#070f2c]/90 border border-blue-900/60 rounded-2xl p-5 shadow-2xl">
+            <h3 className="text-base font-bold uppercase font-display text-white mb-1 flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-amber-400" />
+              <span>Daftar Tim Lolos Top 10 Turnamen Mingguan</span>
             </h3>
-            <p className="text-xs text-slate-400 mb-6">
-              Daftar seluruh tim dan akumulasi poin dari storan stiker DONE yang lolos inspeksi panitia.
+            <p className="text-xs text-slate-400 mb-4">
+              Hubungi 10 tim peraih poin terbesar untuk dimasukkan ke grup khusus turnamen mingguan.
             </p>
+
+            <div className="space-y-3">
+              {top10Players.map((player, idx) => {
+                const inviteUrl = esportsStore.getTop10InviteLink(player, idx + 1);
+                const isContacted = contactedTeams[player.id];
+
+                return (
+                  <div
+                    key={player.id}
+                    className="p-3.5 bg-[#030616] rounded-xl border border-blue-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-cyan-400 text-slate-950 font-black font-mono flex items-center justify-center text-xs">
+                        #{idx + 1}
+                      </div>
+                      <div>
+                        <div className="font-bold text-white text-sm">{player.name}</div>
+                        <div className="text-[11px] font-mono text-cyan-400">
+                          Kapten: {player.captainName} · WA: {player.phone} · Poin: {player.points} Pts
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={inviteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setContactedTeams((prev) => ({ ...prev, [player.id]: true }))}
+                        className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 shadow"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                        <span>Chat WhatsApp Tim</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                      {isContacted && (
+                        <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950 px-2 py-1 rounded border border-cyan-500/30">
+                          ✓ Terkirim
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: KELOLA & HAPUS PESERTA */}
+      {activeTab === 'participants' && (
+        <div className="space-y-4">
+          <div className="bg-[#070f2c]/90 border border-blue-900/60 rounded-2xl p-5 shadow-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-base font-bold uppercase font-display text-white flex items-center gap-2">
+                  <Users className="w-5 h-5 text-cyan-400" />
+                  <span>Daftar Peserta & Tim Terdaftar ({participants.length})</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Admin dapat mengedit poin, jumlah kemenangan, nomor WhatsApp, serta menghapus peserta yang tidak aktif atau bermasalah.
+                </p>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Cari peserta / no wa..."
+                  value={participantSearch}
+                  onChange={(e) => setParticipantSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 bg-[#030616] border border-blue-900/60 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono"
+                />
+              </div>
+            </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-slate-800 text-slate-400 font-mono uppercase bg-slate-950">
-                    <th className="py-2.5 px-3">Rank</th>
-                    <th className="py-2.5 px-3">Nama Tim</th>
-                    <th className="py-2.5 px-3">No WhatsApp</th>
-                    <th className="py-2.5 px-3 text-center">Match FT</th>
-                    <th className="py-2.5 px-3 text-center">Total Win</th>
-                    <th className="py-2.5 px-3 text-right">Poin FT</th>
-                    <th className="py-2.5 px-3 text-center">Status</th>
+                  <tr className="border-b border-blue-900/50 bg-[#030616] text-[11px] font-mono uppercase text-slate-400">
+                    <th className="py-3 px-3">Peserta</th>
+                    <th className="py-3 px-3 font-mono">No WhatsApp</th>
+                    <th className="py-3 px-3 font-mono text-center">Poin</th>
+                    <th className="py-3 px-3 font-mono text-center">Menang FT</th>
+                    <th className="py-3 px-3 font-mono text-center">Total Match</th>
+                    <th className="py-3 px-3 text-center">Aksi Panitia</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {players.map((p, idx) => (
-                    <tr key={p.id} className="hover:bg-slate-800/30">
-                      <td className="py-2.5 px-3 font-mono font-bold text-white">#{idx + 1}</td>
-                      <td className="py-2.5 px-3 font-bold text-white">{p.name}</td>
-                      <td className="py-2.5 px-3 font-mono text-emerald-400">{p.phone}</td>
-                      <td className="py-2.5 px-3 text-center font-mono tabular-nums">{p.matchesPlayed}</td>
-                      <td className="py-2.5 px-3 text-center font-mono tabular-nums text-emerald-400 font-bold">{p.wins}</td>
-                      <td className="py-2.5 px-3 text-right font-mono tabular-nums text-emerald-400 font-bold text-sm">{p.points} PTS</td>
-                      <td className="py-2.5 px-3 text-center">
-                        {idx < 10 ? (
-                          <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-                            LOLOS TOP 10
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-500 font-mono">
-                            Di Bawah Garis
-                          </span>
-                        )}
+                <tbody className="divide-y divide-blue-950/60">
+                  {filteredParticipants.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-500">
+                        Tidak ada data peserta yang cocok.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredParticipants.map((part) => (
+                      <tr key={part.id} className="hover:bg-blue-950/20 transition-colors">
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-2.5">
+                            <img
+                              src={part.photoUrl}
+                              alt={part.name}
+                              className="w-8 h-8 rounded-full object-cover border border-cyan-400/50"
+                            />
+                            <div>
+                              <div className="font-bold text-white">{part.name}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">
+                                Terdaftar: {part.registeredAt}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 font-mono text-cyan-300 font-semibold">
+                          {part.phone}
+                        </td>
+                        <td className="py-3 px-3 text-center font-mono text-amber-300 font-bold">
+                          {part.points} Pts
+                        </td>
+                        <td className="py-3 px-3 text-center font-mono text-slate-200">
+                          {part.wins}
+                        </td>
+                        <td className="py-3 px-3 text-center font-mono text-slate-400">
+                          {part.matchesPlayed}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => setEditingParticipant(part)}
+                              className="px-2.5 py-1 bg-blue-950 hover:bg-blue-900 border border-blue-500/40 text-cyan-300 rounded text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Edit Data Peserta"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              <span>Edit</span>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteParticipant(part)}
+                              className="px-2.5 py-1 bg-rose-950/80 hover:bg-rose-900 border border-rose-500/40 text-rose-300 rounded text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Hapus Peserta dari Database"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Hapus</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
-        )}
 
-        {/* TAB 4: Blacklist (Kelola & Setting Lengkap) */}
-        {activeTab === 'blacklist' && (
-          <div className="space-y-6">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 shadow-xl">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
-                <div>
-                  <h3 className="text-base font-bold font-display uppercase text-white flex items-center gap-2">
-                    <Ban className="w-5 h-5 text-rose-400" />
-                    <span>Database & Pengaturan Blacklist ({blacklist.length} Tim)</span>
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Kelola daftar tim dan nomor WhatsApp yang terkena sanksi banned karena memalsukan bukti stiker DONE/CEK. Tersinkron realtime ke database Firestore.
-                  </p>
+          {/* Modal Edit Peserta */}
+          {editingParticipant && (
+            <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-[#070f2c] border border-blue-700 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl text-xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-blue-900/60">
+                  <h4 className="font-bold text-white text-sm uppercase flex items-center gap-2">
+                    <Edit2 className="w-4 h-4 text-cyan-400" />
+                    <span>Edit Data Peserta: {editingParticipant.name}</span>
+                  </h4>
+                  <button
+                    onClick={() => setEditingParticipant(null)}
+                    className="text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowAddBlForm(!showAddBlForm)}
-                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded flex items-center gap-2 text-xs cursor-pointer shadow-lg shadow-rose-600/20 self-start sm:self-auto shrink-0"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>{showAddBlForm ? 'Tutup Form Tambah' : '+ Tambah Blacklist Baru'}</span>
-                </button>
-              </div>
 
-              {/* Form Tambah Blacklist Manual */}
-              {showAddBlForm && (
-                <form onSubmit={handleAddBlacklist} className="mt-5 p-4 bg-slate-950 border border-rose-500/30 rounded-xl space-y-4 text-xs">
-                  <div className="font-bold text-rose-300 uppercase tracking-wider text-[11px] flex items-center gap-1.5 pb-2 border-b border-slate-800">
-                    <ShieldAlert className="w-4 h-4" />
-                    <span>Form Input Tim / Nomor ke Blacklist</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Nama Tim *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Contoh: CHEATER VORTEX 4v4"
-                        value={blTeamName}
-                        onChange={(e) => setBlTeamName(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-rose-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Nama Kapten / IGN</label>
-                      <input
-                        type="text"
-                        placeholder="Contoh: Kapten Doni"
-                        value={blCaptainName}
-                        onChange={(e) => setBlCaptainName(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-rose-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Nomor WhatsApp *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Contoh: 085799988771"
-                        value={blPhone}
-                        onChange={(e) => setBlPhone(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-rose-500"
-                      />
-                    </div>
-                  </div>
-
+                <form onSubmit={handleSaveEditParticipant} className="space-y-3">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Alasan Pelanggaran *</label>
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {[
-                        'Memalsukan screenshot stiker DONE/CEK admin di grup GB',
-                        'Mengedit jam chat via WhatsApp Web / Inspect Element',
-                        'Memotong (crop) jam dan nama grup agar bukti palsu tersamar',
-                        'Menggunakan bukti stiker turnamen lain / event lama',
-                      ].map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setBlReason(preset)}
-                          className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] rounded cursor-pointer border border-slate-700"
-                        >
-                          + {preset.slice(0, 35)}...
-                        </button>
-                      ))}
-                    </div>
+                    <label className="block text-slate-300 font-semibold mb-1">Nama Tim / Peserta</label>
                     <input
                       type="text"
                       required
-                      placeholder="Masukkan alasan lengkap..."
-                      value={blReason}
-                      onChange={(e) => setBlReason(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-rose-500"
+                      value={editingParticipant.name}
+                      onChange={(e) => setEditingParticipant({ ...editingParticipant, name: e.target.value })}
+                      className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-cyan-400 font-semibold"
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Nomor WhatsApp</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingParticipant.phone}
+                      onChange={(e) => setEditingParticipant({ ...editingParticipant, phone: e.target.value })}
+                      className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-cyan-400"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Sanksi Resmi</label>
+                      <label className="block text-slate-300 font-semibold mb-1">Poin</label>
                       <input
-                        type="text"
-                        value={blPenalty}
-                        onChange={(e) => setBlPenalty(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-rose-300 font-bold focus:outline-none focus:border-rose-500"
+                        type="number"
+                        min="0"
+                        value={editingParticipant.points}
+                        onChange={(e) => setEditingParticipant({ ...editingParticipant, points: Number(e.target.value) })}
+                        className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-amber-300 font-mono font-bold focus:outline-none focus:border-cyan-400"
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Ringkasan Bukti / Forensik</label>
+                      <label className="block text-slate-300 font-semibold mb-1">Menang FT</label>
                       <input
-                        type="text"
-                        placeholder="Contoh: Log chat membuktikan admin tidak pernah kirim stiker di jam tersebut"
-                        value={blEvidence}
-                        onChange={(e) => setBlEvidence(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-rose-500"
+                        type="number"
+                        min="0"
+                        value={editingParticipant.wins}
+                        onChange={(e) => setEditingParticipant({ ...editingParticipant, wins: Number(e.target.value) })}
+                        className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-cyan-300 font-mono font-bold focus:outline-none focus:border-cyan-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Total Match</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={editingParticipant.matchesPlayed}
+                        onChange={(e) => setEditingParticipant({ ...editingParticipant, matchesPlayed: Number(e.target.value) })}
+                        className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-slate-200 font-mono focus:outline-none focus:border-cyan-400"
                       />
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end gap-2 pt-2">
+                  <div className="flex items-center justify-end gap-2 pt-3">
                     <button
                       type="button"
-                      onClick={() => setShowAddBlForm(false)}
-                      className="px-4 py-2 bg-slate-800 text-slate-300 rounded cursor-pointer"
+                      onClick={() => setEditingParticipant(null)}
+                      className="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg cursor-pointer"
                     >
                       Batal
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded flex items-center gap-1.5 shadow-md shadow-rose-600/30 cursor-pointer"
+                      className="px-5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg cursor-pointer shadow-md"
                     >
-                      <Ban className="w-3.5 h-3.5" />
-                      <span>Simpan & Terapkan Blacklist</span>
+                      Simpan Perubahan
                     </button>
                   </div>
                 </form>
-              )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
-              {/* Blacklist Items Table / Cards */}
-              <div className="mt-5 space-y-3">
-                {blacklist.length === 0 ? (
-                  <div className="p-8 text-center bg-slate-950 rounded-lg border border-slate-800 text-slate-400">
-                    Belum ada tim yang diblacklist.
-                  </div>
-                ) : (
-                  blacklist.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="p-4 bg-slate-950 border border-rose-500/30 hover:border-rose-500/50 rounded-xl text-xs space-y-2 transition-all shadow-sm"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-rose-400 font-display uppercase">
-                              {entry.teamName}
-                            </span>
-                            <span className="text-[10px] bg-rose-950 border border-rose-500/40 text-rose-300 font-bold px-2 py-0.5 rounded">
-                              BLACKLISTED
-                            </span>
-                          </div>
-                          <div className="text-slate-400 font-mono text-[11px] mt-0.5">
-                            Kapten: <strong className="text-slate-200">{entry.captainName || entry.teamName}</strong> · WhatsApp: <strong className="text-emerald-400">{entry.phone}</strong>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setEditingBlEntry(entry)}
-                            className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded flex items-center gap-1 cursor-pointer"
-                            title="Edit Data Blacklist"
-                          >
-                            <Edit2 className="w-3 h-3 text-amber-400" />
-                            <span>Edit</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteBlacklist(entry)}
-                            className="px-2.5 py-1.5 bg-rose-950/80 hover:bg-rose-900 border border-rose-500/40 text-rose-300 font-bold rounded flex items-center gap-1 cursor-pointer"
-                            title="Cabut Sanksi & Hapus dari Blacklist"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>Hapus</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="text-slate-300">
-                        <strong className="text-white">Alasan:</strong> {entry.reason}
-                      </div>
-
-                      {entry.evidenceSummary && (
-                        <div className="text-slate-400 font-mono text-[11px] bg-slate-900/60 p-2 rounded border border-slate-800/80">
-                          <strong className="text-slate-300">Hasil Forensik:</strong> {entry.evidenceSummary}
-                        </div>
-                      )}
-
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] pt-1 text-slate-400 font-mono">
-                        <div>
-                          <strong className="text-rose-400">Sanksi:</strong> {entry.penalty}
-                        </div>
-                        <div>Ditetapkan: {entry.date}</div>
-                      </div>
-                    </div>
-                  ))
-                )}
+      {/* TAB 4: Kelola Poster & Banner */}
+      {activeTab === 'banners' && (
+        <div className="space-y-6">
+          <div className="bg-[#070f2c]/90 border border-blue-900/60 rounded-2xl p-5 sm:p-6 max-w-2xl shadow-xl">
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-blue-900/60">
+              <Upload className="w-5 h-5 text-cyan-400" />
+              <div>
+                <h3 className="text-base font-bold font-display uppercase text-white">
+                  Unggah Poster Turnamen Baru
+                </h3>
+                <p className="text-slate-400 text-xs">
+                  Poster akan langsung tampil di halaman utama dan popup saat player membuka website.
+                </p>
               </div>
             </div>
 
-            {/* Modal Edit Blacklist Entry */}
-            {editingBlEntry && (
-              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-lg w-full p-5 sm:p-6 shadow-2xl text-xs space-y-4">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                    <h4 className="font-bold text-white text-sm uppercase flex items-center gap-2">
-                      <Edit2 className="w-4 h-4 text-amber-400" />
-                      <span>Edit Data Blacklist: {editingBlEntry.teamName}</span>
-                    </h4>
-                    <button
-                      type="button"
-                      onClick={() => setEditingBlEntry(null)}
-                      className="text-slate-400 hover:text-white"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
+            <form onSubmit={handleBannerSubmit} className="space-y-4">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Judul Poster Turnamen *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: TURNAMEN MINGGUAN FREE FIRE CLASH SQUAD 30K"
+                  value={bannerTitle}
+                  onChange={(e) => setBannerTitle(e.target.value)}
+                  className="w-full bg-[#030616] border border-blue-900/70 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-cyan-400 text-xs"
+                />
+              </div>
 
-                  <form onSubmit={handleSaveEditBlacklist} className="space-y-3">
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Nama Tim</label>
-                      <input
-                        type="text"
-                        required
-                        value={editingBlEntry.teamName}
-                        onChange={(e) => setEditingBlEntry({ ...editingBlEntry, teamName: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-amber-400"
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Keterangan / Deskripsi Poster
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Contoh: Total hadiah Rp 30.000. Pendaftaran 100% gratis, kumpulkan poin dari kemenangan FT!"
+                  value={bannerCaption}
+                  onChange={(e) => setBannerCaption(e.target.value)}
+                  className="w-full bg-[#030616] border border-blue-900/70 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-cyan-400 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  File Foto Poster dari Galeri (HP / Laptop) *
+                </label>
+                <div className="border-2 border-dashed border-blue-800 rounded-xl p-4 text-center bg-[#030616]/70">
+                  {isBannerUploading ? (
+                    <div className="text-cyan-400 font-mono py-4">Mengompres foto poster...</div>
+                  ) : bannerImage ? (
+                    <div className="space-y-2">
+                      <img
+                        src={bannerImage}
+                        alt="Preview Poster"
+                        className="max-h-48 mx-auto rounded-lg object-contain border border-blue-800 shadow-lg"
                       />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-slate-300 font-semibold mb-1">Nama Kapten</label>
-                        <input
-                          type="text"
-                          value={editingBlEntry.captainName}
-                          onChange={(e) => setEditingBlEntry({ ...editingBlEntry, captainName: e.target.value })}
-                          className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-amber-400"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-slate-300 font-semibold mb-1">No WhatsApp</label>
-                        <input
-                          type="text"
-                          required
-                          value={editingBlEntry.phone}
-                          onChange={(e) => setEditingBlEntry({ ...editingBlEntry, phone: e.target.value })}
-                          className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-400"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Alasan Blacklist</label>
-                      <input
-                        type="text"
-                        required
-                        value={editingBlEntry.reason}
-                        onChange={(e) => setEditingBlEntry({ ...editingBlEntry, reason: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-amber-400"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Sanksi Resmi</label>
-                      <input
-                        type="text"
-                        required
-                        value={editingBlEntry.penalty}
-                        onChange={(e) => setEditingBlEntry({ ...editingBlEntry, penalty: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-rose-300 font-bold focus:outline-none focus:border-amber-400"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Ringkasan Forensik Bukti</label>
-                      <textarea
-                        rows={2}
-                        value={editingBlEntry.evidenceSummary}
-                        onChange={(e) => setEditingBlEntry({ ...editingBlEntry, evidenceSummary: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-amber-400"
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2 pt-2">
                       <button
                         type="button"
-                        onClick={() => setEditingBlEntry(null)}
-                        className="px-4 py-2 bg-slate-800 text-slate-300 rounded cursor-pointer"
+                        onClick={() => setBannerImage('')}
+                        className="text-rose-400 hover:underline text-[11px] cursor-pointer"
                       >
-                        Batal
-                      </button>
-                      <button
-                        type="submit"
-                        className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded flex items-center gap-1.5 cursor-pointer shadow-lg shadow-amber-500/20"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>Simpan Perubahan</span>
+                        Ganti Foto
                       </button>
                     </div>
-                  </form>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 5: Pengaturan Sosial Media & Saluran Informasi */}
-        {activeTab === 'contacts' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-3xl shadow-xl">
-            <div className="pb-4 border-b border-slate-800 mb-6">
-              <h3 className="text-base font-bold uppercase font-display text-white flex items-center gap-2">
-                <MessageCircle className="w-5 h-5 text-emerald-400" />
-                <span>Pengaturan Sosial Media (TikTok, Instagram) & Saluran Informasi</span>
-              </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Atur nama akun TikTok, Instagram beserta tautan resminya, serta link Saluran Informasi WhatsApp dan kontak panitia. Perubahan langsung tersinkron secara realtime ke database Firestore dan tampil di seluruh bagian website.
-              </p>
-            </div>
-
-            <form onSubmit={handleSaveContacts} className="space-y-6 text-xs">
-              {/* SECTION 1: TIKTOK */}
-              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
-                <div className="flex items-center gap-2 font-bold text-white uppercase tracking-wider text-[11px] pb-2 border-b border-slate-800">
-                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
-                  <span>Pengaturan Akun TikTok Panitia</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">
-                      Nama / Handle Akun TikTok *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: @kleponx.official"
-                      value={contactForm.tiktokName || ''}
-                      onChange={(e) => setContactForm({ ...contactForm, tiktokName: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white focus:outline-none focus:border-cyan-400 font-mono"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">
-                      Link / URL Tautan Profil TikTok *
-                    </label>
-                    <input
-                      type="url"
-                      required
-                      placeholder="Contoh: https://tiktok.com/@kleponx.official"
-                      value={contactForm.tiktokUrl || ''}
-                      onChange={(e) => setContactForm({ ...contactForm, tiktokUrl: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white focus:outline-none focus:border-cyan-400 font-mono"
-                    />
-                  </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Upload className="w-8 h-8 text-cyan-400 mx-auto" />
+                      <label className="text-cyan-400 hover:underline cursor-pointer font-bold block text-sm">
+                        <span>Pilih Foto dari Galeri</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleBannerUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* SECTION 2: INSTAGRAM */}
-              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
-                <div className="flex items-center gap-2 font-bold text-white uppercase tracking-wider text-[11px] pb-2 border-b border-slate-800">
-                  <span className="w-2.5 h-2.5 rounded-full bg-pink-500"></span>
-                  <span>Pengaturan Akun Instagram Panitia</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">
-                      Nama / Handle Akun Instagram *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Contoh: @klepon_esports"
-                      value={contactForm.instagramName || ''}
-                      onChange={(e) => setContactForm({ ...contactForm, instagramName: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white focus:outline-none focus:border-pink-500 font-mono"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">
-                      Link / URL Tautan Profil Instagram *
-                    </label>
-                    <input
-                      type="url"
-                      required
-                      placeholder="Contoh: https://instagram.com/klepon_esports"
-                      value={contactForm.instagramUrl || ''}
-                      onChange={(e) => setContactForm({ ...contactForm, instagramUrl: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white focus:outline-none focus:border-pink-500 font-mono"
-                    />
-                  </div>
-                </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="bannerMainCheck"
+                  checked={bannerSetAsMain}
+                  onChange={(e) => setBannerSetAsMain(e.target.checked)}
+                  className="rounded border-blue-900 text-cyan-500 focus:ring-cyan-400"
+                />
+                <label htmlFor="bannerMainCheck" className="text-slate-300 text-xs cursor-pointer">
+                  Jadikan sebagai <strong>Poster Utama Aktif</strong> di bawah judul Weekly
+                </label>
               </div>
 
-              {/* SECTION 3: SALURAN INFORMASI & WHATSAPP */}
-              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
-                <div className="flex items-center gap-2 font-bold text-white uppercase tracking-wider text-[11px] pb-2 border-b border-slate-800">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-                  <span>Saluran Informasi Resmi WhatsApp & Kontak Panitia</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Nama Saluran Informasi Resmi</label>
-                    <input
-                      type="text"
-                      value={contactForm.infoChannelName}
-                      onChange={(e) => setContactForm({ ...contactForm, infoChannelName: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Tautan Saluran Resmi WhatsApp (whatsapp.com/channel/...)</label>
-                    <input
-                      type="text"
-                      value={contactForm.infoChannelLink}
-                      onChange={(e) => setContactForm({ ...contactForm, infoChannelLink: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Nama Admin Panitia</label>
-                    <input
-                      type="text"
-                      value={contactForm.adminName}
-                      onChange={(e) => setContactForm({ ...contactForm, adminName: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Nomor WhatsApp Admin (Konsultasi / Tanya Jawab)</label>
-                    <input
-                      type="text"
-                      value={contactForm.adminPhone}
-                      onChange={(e) =>
-                        setContactForm({
-                          ...contactForm,
-                          adminPhone: e.target.value,
-                          consultationWaUrl: `https://wa.me/${e.target.value}?text=Halo%20Panitia%20KLEPON,%20saya%20ingin%20konsultasi%20dan%20tanya-tanya%20seputar%20Turnamen%20Mingguan%20Gratis%20Free%20Fire%20Clash%20Squad`,
-                        })
-                      }
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Nama Grup WhatsApp Khusus Top 10 (Mingguan)</label>
-                    <input
-                      type="text"
-                      placeholder="Contoh: Grup Khusus Turnamen Mingguan Top 10"
-                      value={contactForm.whatsappGroupName || ''}
-                      onChange={(e) => setContactForm({ ...contactForm, whatsappGroupName: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Link Grup WhatsApp Khusus Top 10</label>
-                    <input
-                      type="text"
-                      placeholder="https://chat.whatsapp.com/..."
-                      value={contactForm.whatsappGroupUrl || ''}
-                      onChange={(e) => setContactForm({ ...contactForm, whatsappGroupUrl: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/20 text-xs"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Simpan Seluruh Pengaturan Sosial Media & Kontak</span>
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={isBannerUploading}
+                className="px-5 py-2.5 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg flex items-center gap-2 cursor-pointer shadow-lg shadow-cyan-500/20 text-xs"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Simpan Poster Baru</span>
+              </button>
             </form>
           </div>
-        )}
 
-        {/* TAB: Kelola Banner & Poster Turnamen (Khusus Admin) */}
-        {activeTab === 'banners' && (
-          <div className="space-y-6">
-            {/* Upload New Banner Form */}
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-6 max-w-2xl shadow-xl">
-              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
-                <Upload className="w-5 h-5 text-emerald-400" />
-                <div>
-                  <h3 className="text-base font-bold font-display uppercase text-white">
-                    Unggah & Edit Poster Turnamen (Khusus Admin)
-                  </h3>
-                  <p className="text-slate-400 text-xs">
-                    Poster yang Anda unggah akan muncul di halaman utama (tepat di bawah tulisan Weekly) dan pop-up saat player masuk.
-                  </p>
+          <div>
+            <h4 className="text-sm font-bold uppercase text-white mb-3 font-display flex items-center gap-2">
+              <ImageIcon className="w-4 h-4 text-cyan-400" />
+              <span>Daftar Poster Turnamen Tersimpan ({banners.length})</span>
+            </h4>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {banners.map((b) => (
+                <div
+                  key={b.id}
+                  className="bg-[#070f2a] border border-blue-900/60 rounded-xl overflow-hidden shadow-lg flex flex-col justify-between"
+                >
+                  <div className="relative aspect-[4/3] bg-black">
+                    <img src={b.imageUrl} alt={b.title} className="w-full h-full object-cover" />
+                    {b.isMain && (
+                      <span className="absolute top-2 left-2 bg-cyan-400 text-slate-950 font-bold px-2 py-0.5 rounded text-[10px] font-mono">
+                        UTAMA
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-3.5 space-y-2">
+                    <h5 className="font-bold text-white text-xs line-clamp-1">{b.title}</h5>
+                    <div className="flex items-center justify-between pt-2 border-t border-blue-950">
+                      {!b.isMain && (
+                        <button
+                          onClick={() => {
+                            esportsStore.setMainBanner(b.id);
+                            onNotify('Poster utama berhasil diubah.');
+                          }}
+                          className="text-cyan-400 hover:underline text-[11px] font-bold cursor-pointer"
+                        >
+                          Set Utama
+                        </button>
+                      )}
+                      {banners.length > 1 && (
+                        <button
+                          onClick={() => {
+                            if (confirm('Hapus poster ini?')) {
+                              esportsStore.deleteBannerPoster(b.id);
+                              onNotify('Poster dihapus.');
+                            }
+                          }}
+                          className="text-rose-400 hover:underline text-[11px] flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Hapus</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: Blacklist */}
+      {activeTab === 'blacklist' && (
+        <div className="space-y-4">
+          <div className="bg-[#070f2c]/90 border border-blue-900/60 rounded-2xl p-5 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-blue-900/60 mb-4">
+              <div>
+                <h3 className="text-base font-bold uppercase font-display text-white flex items-center gap-2">
+                  <Ban className="w-5 h-5 text-rose-400" />
+                  <span>Daftar Blacklist Pelanggaran Turnamen ({blacklist.length})</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Tim dan nomor WhatsApp yang di-ban permanen karena memalsukan screenshot stiker DONE admin.
+                </p>
               </div>
 
-              <form onSubmit={handleBannerSubmit} className="space-y-4">
+              <button
+                onClick={() => setShowAddBlForm(!showAddBlForm)}
+                className="px-3.5 py-2 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-lg"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{showAddBlForm ? 'Tutup Form' : 'Tambah Blacklist'}</span>
+              </button>
+            </div>
+
+            {showAddBlForm && (
+              <form onSubmit={handleAddBlacklist} className="p-4 bg-[#030616] rounded-xl border border-rose-500/30 space-y-3 mb-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Nama Tim *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Contoh: CHEATER FAKE DONE"
+                      value={blTeamName}
+                      onChange={(e) => setBlTeamName(e.target.value)}
+                      className="w-full bg-[#070e28] border border-blue-900 rounded px-3 py-2 text-white font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">No WhatsApp Pelaku *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="08xxxxxxxxxx"
+                      value={blPhone}
+                      onChange={(e) => setBlPhone(e.target.value)}
+                      className="w-full bg-[#070e28] border border-blue-900 rounded px-3 py-2 text-white font-mono"
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">
-                    Judul Poster / Pamflet Turnamen *
-                  </label>
+                  <label className="block text-slate-300 font-semibold mb-1">Alasan Pelanggaran *</label>
                   <input
                     type="text"
                     required
-                    placeholder="Contoh: PAMFLET FREE FIRE CLASH SQUAD HADIAH 30K MINGGUAN"
-                    value={bannerTitle}
-                    onChange={(e) => setBannerTitle(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs"
+                    placeholder="Contoh: Mengirim screenshot stiker DONE editan / manipulasi jam match."
+                    value={blReason}
+                    onChange={(e) => setBlReason(e.target.value)}
+                    className="w-full bg-[#070e28] border border-blue-900 rounded px-3 py-2 text-white"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">
-                    Keterangan / Deskripsi Poster
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Contoh: Total hadiah Rp 30.000 (Juara 1: 15k, Juara 2: 10k, Juara 3: 5k). Pendaftaran gratis, kumpulkan poin dari kemenangan FT di GB!"
-                    value={bannerCaption}
-                    onChange={(e) => setBannerCaption(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 font-bold mb-1">
-                    Pilih File Foto Poster dari Galeri Perangkat *
-                  </label>
-                  <div className="border border-dashed border-slate-700 rounded-lg p-4 text-center bg-slate-950/60">
-                    {isBannerUploading ? (
-                      <div className="py-4 text-emerald-400 font-mono text-xs animate-pulse">
-                        Mengompres & memproses gambar poster...
-                      </div>
-                    ) : bannerImage ? (
-                      <div className="space-y-2">
-                        <img
-                          src={bannerImage}
-                          alt="Preview Banner"
-                          className="max-h-48 mx-auto rounded object-contain border border-slate-700 shadow-lg"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setBannerImage('')}
-                          className="text-rose-400 hover:underline text-[11px] cursor-pointer"
-                        >
-                          Ganti Foto Poster
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <Upload className="w-8 h-8 text-slate-500 mx-auto" />
-                        <label className="text-emerald-400 hover:underline cursor-pointer font-bold block text-sm">
-                          <span>Pilih Foto dari Galeri (HP / Laptop)</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleBannerUpload}
-                            className="hidden"
-                          />
-                        </label>
-                        <p className="text-[10px] text-slate-500">
-                          Format JPG atau PNG. Otomatis dikompres agar sinkron realtime ke seluruh pengunjung.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="bannerMainCheck"
-                    checked={bannerSetAsMain}
-                    onChange={(e) => setBannerSetAsMain(e.target.checked)}
-                    className="rounded border-slate-700 text-emerald-500 focus:ring-emerald-500"
-                  />
-                  <label htmlFor="bannerMainCheck" className="text-slate-300 text-xs cursor-pointer">
-                    Jadikan sebagai <strong>Banner Utama Aktif</strong> (tampil di bawah judul Weekly & pop-up masuk website)
-                  </label>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isBannerUploading}
-                  className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded flex items-center gap-2 cursor-pointer disabled:opacity-50 text-xs shadow-lg shadow-emerald-500/20"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Simpan & Terapkan Poster Baru</span>
-                </button>
-              </form>
-            </div>
-
-            {/* Existing Banners List */}
-            <div>
-              <h4 className="text-sm font-bold uppercase text-white mb-3 font-display flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 text-emerald-400" />
-                <span>Daftar Poster Turnamen Tersimpan ({banners.length})</span>
-              </h4>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {banners.map((b) => (
-                  <div
-                    key={b.id}
-                    className={`bg-slate-900 border rounded-xl overflow-hidden flex flex-col justify-between ${
-                      b.isMain ? 'border-amber-500/60 shadow-lg shadow-amber-500/10' : 'border-slate-800'
-                    }`}
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg text-xs cursor-pointer shadow"
                   >
+                    Terbitkan Blacklist
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="space-y-3">
+              {blacklist.map((entry) => (
+                <div key={entry.id} className="p-4 bg-[#030616] rounded-xl border border-rose-950/60 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <div className="relative aspect-[16/9] bg-black overflow-hidden group">
-                        <img
-                          src={b.imageUrl}
-                          alt={b.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                        {b.isMain && (
-                          <span className="absolute top-2 left-2 bg-amber-500 text-slate-950 font-black px-2 py-0.5 rounded text-[10px] font-mono shadow">
-                            BANNER UTAMA AKTIF
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="p-4 space-y-1">
-                        <h5 className="font-bold text-white text-xs leading-snug line-clamp-1">
-                          {b.title}
-                        </h5>
-                        {b.caption && (
-                          <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
-                            {b.caption}
-                          </p>
-                        )}
-                        <div className="text-[10px] font-mono text-slate-500 pt-1">
-                          Diupload: {b.createdAt} oleh {b.uploadedBy}
-                        </div>
-                      </div>
+                      <span className="font-bold text-rose-400 text-sm">{entry.teamName}</span>
+                      <span className="text-slate-400 font-mono text-xs ml-2">({entry.phone})</span>
                     </div>
-
-                    <div className="p-3 bg-slate-950 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                      {!b.isMain ? (
-                        <button
-                          type="button"
-                          onClick={() => handleSetMainBanner(b)}
-                          className="text-amber-400 hover:underline font-bold text-[11px] cursor-pointer flex items-center gap-1"
-                        >
-                          <Sparkles className="w-3 h-3" />
-                          <span>Jadikan Utama</span>
-                        </button>
-                      ) : (
-                        <span className="text-emerald-400 font-bold text-[11px] flex items-center gap-1">
-                          <Check className="w-3 h-3" />
-                          <span>Aktif Sekarang</span>
-                        </span>
-                      )}
-
+                    <div className="flex items-center gap-2">
                       <button
-                        type="button"
-                        onClick={() => handleDeleteBanner(b)}
-                        className="text-rose-400 hover:text-rose-300 p-1 cursor-pointer"
-                        title="Hapus Poster Ini"
+                        onClick={() => setEditingBlEntry(entry)}
+                        className="text-cyan-400 hover:underline text-xs"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBlacklist(entry)}
+                        className="text-rose-400 hover:underline text-xs"
+                      >
+                        Hapus
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
+                  <p className="text-slate-300 text-xs"><strong>Alasan:</strong> {entry.reason}</p>
+                  <div className="text-[11px] font-mono text-rose-300">
+                    Sanksi: {entry.penalty}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* TAB 6: Reset Season */}
-        {activeTab === 'season' && (
-          <div className="bg-slate-900 border border-slate-800 rounded-lg p-6 max-w-xl">
-            <h3 className="text-lg font-bold uppercase font-display text-white mb-2">
-              Sistem Reset Klasemen Mingguan Otomatis
+      {/* TAB 6: Pengaturan Sosmed & Kontak */}
+      {activeTab === 'contacts' && (
+        <div className="bg-[#070f2c]/90 border border-blue-900/60 rounded-2xl p-6 max-w-3xl shadow-xl">
+          <div className="pb-4 border-b border-blue-900/60 mb-6">
+            <h3 className="text-base font-bold uppercase font-display text-white flex items-center gap-2">
+              <MessageCircle className="w-5 h-5 text-cyan-400" />
+              <span>Pengaturan Sosial Media (TikTok, Instagram) & Saluran Informasi</span>
             </h3>
-            <p className="text-xs text-slate-300 mb-6 leading-relaxed">
-              Season aktif: <strong className="text-emerald-400 font-mono">{season.name}</strong>.
-              <br />
-              Klasemen otomatis ter-reset saat melewati batas minggu: <strong className="text-white font-mono">{season.endDate} 23:59 WIB</strong>.
-              Panitia juga dapat melakukan reset manual di bawah ini jika pertandingan bagan final telah selesai.
+            <p className="text-xs text-slate-400 mt-0.5">
+              Ubah link dan nama akun TikTok, Instagram, serta saluran WhatsApp. Perubahan langsung tersimpan ke Firestore secara realtime.
+            </p>
+          </div>
+
+          <form onSubmit={handleSaveContacts} className="space-y-5 text-xs">
+            <div className="p-4 bg-[#030616] rounded-xl border border-blue-900/60 space-y-3">
+              <div className="font-bold text-cyan-400 uppercase tracking-wider text-[11px]">
+                Pengaturan Akun TikTok
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Handle TikTok</label>
+                  <input
+                    type="text"
+                    value={contactForm.tiktokName || ''}
+                    onChange={(e) => setContactForm({ ...contactForm, tiktokName: e.target.value })}
+                    className="w-full bg-[#070e28] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Link URL TikTok</label>
+                  <input
+                    type="url"
+                    value={contactForm.tiktokUrl || ''}
+                    onChange={(e) => setContactForm({ ...contactForm, tiktokUrl: e.target.value })}
+                    className="w-full bg-[#070e28] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-[#030616] rounded-xl border border-blue-900/60 space-y-3">
+              <div className="font-bold text-pink-400 uppercase tracking-wider text-[11px]">
+                Pengaturan Akun Instagram
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Handle Instagram</label>
+                  <input
+                    type="text"
+                    value={contactForm.instagramName || ''}
+                    onChange={(e) => setContactForm({ ...contactForm, instagramName: e.target.value })}
+                    className="w-full bg-[#070e28] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Link URL Instagram</label>
+                  <input
+                    type="url"
+                    value={contactForm.instagramUrl || ''}
+                    onChange={(e) => setContactForm({ ...contactForm, instagramUrl: e.target.value })}
+                    className="w-full bg-[#070e28] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-[#030616] rounded-xl border border-blue-900/60 space-y-3">
+              <div className="font-bold text-cyan-400 uppercase tracking-wider text-[11px]">
+                Pengaturan Saluran Informasi & WhatsApp
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Link Saluran WhatsApp</label>
+                  <input
+                    type="url"
+                    value={contactForm.infoChannelLink || ''}
+                    onChange={(e) => setContactForm({ ...contactForm, infoChannelLink: e.target.value })}
+                    className="w-full bg-[#070e28] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Nomor WhatsApp Admin (Konsultasi)</label>
+                  <input
+                    type="text"
+                    value={contactForm.adminPhone || ''}
+                    onChange={(e) =>
+                      setContactForm({
+                        ...contactForm,
+                        adminPhone: e.target.value,
+                        consultationWaUrl: `https://wa.me/${e.target.value}?text=Halo%20Panitia%20KLEPON,%20saya%20ingin%20konsultasi%20seputar%20Turnamen%20Mingguan`,
+                      })
+                    }
+                    className="w-full bg-[#070e28] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="px-6 py-2.5 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg flex items-center gap-2 cursor-pointer shadow-lg shadow-cyan-500/20"
+            >
+              <Save className="w-4 h-4" />
+              <span>Simpan Seluruh Pengaturan Kontak</span>
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* TAB 7: Pengaturan Hadiah & Reset Klasemen Tanpa Tulisan Week */}
+      {activeTab === 'season' && (
+        <div className="space-y-6 max-w-2xl">
+          {/* Edit Prize Pool */}
+          <div className="bg-[#070f2c]/90 border border-blue-900/60 rounded-2xl p-6 shadow-xl space-y-4">
+            <h3 className="text-base font-bold uppercase font-display text-white flex items-center gap-2">
+              <Gift className="w-5 h-5 text-amber-400" />
+              <span>Edit Nominal Hadiah Turnamen Mingguan</span>
+            </h3>
+            <p className="text-xs text-slate-400">
+              Ubah jumlah nominal hadiah Juara 1, 2, dan 3 yang ditampilkan di seluruh halaman website.
+            </p>
+
+            <form onSubmit={handleSaveSeason} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Total Hadiah (Prize Pool)</label>
+                <input
+                  type="text"
+                  value={seasonForm.totalPrizePool}
+                  onChange={(e) => setSeasonForm({ ...seasonForm, totalPrizePool: e.target.value })}
+                  className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-amber-300 font-mono font-bold"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Juara 1</label>
+                  <input
+                    type="text"
+                    value={seasonForm.firstPrize}
+                    onChange={(e) => setSeasonForm({ ...seasonForm, firstPrize: e.target.value })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Juara 2</label>
+                  <input
+                    type="text"
+                    value={seasonForm.secondPrize}
+                    onChange={(e) => setSeasonForm({ ...seasonForm, secondPrize: e.target.value })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Juara 3</label>
+                  <input
+                    type="text"
+                    value={seasonForm.thirdPrize}
+                    onChange={(e) => setSeasonForm({ ...seasonForm, thirdPrize: e.target.value })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="px-5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg cursor-pointer shadow"
+              >
+                Simpan Hadiah
+              </button>
+            </form>
+          </div>
+
+          {/* Reset Klasemen Tanpa Tulisan Week */}
+          <div className="bg-[#070f2c]/90 border border-rose-500/30 rounded-2xl p-6 shadow-xl">
+            <h3 className="text-base font-bold uppercase font-display text-white mb-2 flex items-center gap-2">
+              <RotateCcw className="w-5 h-5 text-rose-400" />
+              <span>Reset Klasemen Poin Mingguan</span>
+            </h3>
+            <p className="text-xs text-slate-300 mb-5 leading-relaxed">
+              Mereset seluruh poin peserta ke <strong>0 Poin</strong> untuk memulai babak turnamen baru.
+              Reset dilakukan bersih <strong>tanpa label Week 1 atau Week 2</strong>.
             </p>
 
             <button
               onClick={handleResetSeason}
-              className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-rose-600/20"
+              className="px-5 py-2.5 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 text-white font-bold rounded-lg text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-rose-600/20"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>Reset Klasemen & Buka Season Baru (Week {season.weekNumber + 1})</span>
+              <span>Reset Klasemen Poin Turnamen (Poin Kembali ke 0)</span>
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Modal Inspeksi Bukti Stiker DONE Resolusi Penuh */}
-        {selectedReport && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
-            <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl p-5 sm:p-6 text-xs">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
-                <div>
-                  <h3 className="text-base font-bold font-display uppercase text-white flex items-center gap-2">
-                    <span>Inspeksi Foto Stiker DONE/CEK: {selectedReport.teamName}</span>
-                  </h3>
-                  <div className="text-slate-400 font-mono text-[11px] mt-0.5">
-                    No WhatsApp: <span className="text-emerald-400 font-bold">{selectedReport.phone}</span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setSelectedReport(null);
-                    setShowRejectDialog(false);
-                  }}
-                  className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded cursor-pointer"
-                >
-                  Tutup
-                </button>
-              </div>
-
-              {/* Screenshot View */}
-              <div className="mb-4 bg-slate-950 p-2 rounded border border-slate-800 text-center">
-                <div className="text-[11px] font-mono text-slate-500 mb-2 flex items-center justify-between px-2">
-                  <span>BUKTI CHAT DI GB (STIKER DONE / CEK ADMIN)</span>
-                  <a
-                    href={selectedReport.screenshotUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-emerald-400 hover:underline flex items-center gap-1"
-                  >
-                    <span>Buka Resolusi Penuh</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-                <div className="max-h-96 overflow-hidden rounded border border-slate-800 mx-auto bg-black">
-                  <img
-                    src={selectedReport.screenshotUrl}
-                    alt="Bukti Chat GB"
-                    className="w-full h-auto object-contain max-h-96 mx-auto"
-                  />
+      {/* Modal Inspeksi Bukti Stiker DONE */}
+      {selectedReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+          <div className="bg-[#070f2c] border border-blue-700 rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl p-5 sm:p-6 text-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-blue-900 mb-4">
+              <div>
+                <h3 className="text-base font-bold font-display uppercase text-white">
+                  Inspeksi Foto Stiker DONE/CEK: {selectedReport.teamName}
+                </h3>
+                <div className="text-slate-400 font-mono text-[11px] mt-0.5">
+                  No WhatsApp: <span className="text-cyan-400 font-bold">{selectedReport.phone}</span>
                 </div>
               </div>
+              <button
+                onClick={() => {
+                  setSelectedReport(null);
+                  setShowRejectDialog(false);
+                }}
+                className="px-3 py-1 bg-slate-800 text-slate-300 rounded cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
 
-              {/* Details */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-4 font-mono text-[11px]">
-                <div className="bg-slate-950 p-2.5 rounded border border-slate-800">
-                  <div className="text-slate-500">NO WHATSAPP</div>
-                  <div className="text-emerald-400 font-bold">{selectedReport.phone}</div>
-                </div>
-                <div className="bg-slate-950 p-2.5 rounded border border-slate-800">
-                  <div className="text-slate-500">TGL STORAN MENANG</div>
-                  <div className="text-white font-bold">{selectedReport.storanDate}</div>
-                </div>
-                <div className="bg-slate-950 p-2.5 rounded border border-slate-800">
-                  <div className="text-slate-500">STATUS</div>
-                  <div className="text-amber-400 font-bold">{selectedReport.status}</div>
-                </div>
-              </div>
-
-              {selectedReport.adminNotes && (
-                <div className="bg-slate-950 p-3 rounded border border-slate-800 mb-4 text-slate-300">
-                  <div className="font-semibold text-slate-400 mb-1">Catatan Audit:</div>
-                  <div className="font-mono text-[11px]">{selectedReport.adminNotes}</div>
-                </div>
-              )}
-
-              {/* Reject Reason Dialog */}
-              {showRejectDialog && (
-                <div className="bg-rose-950/40 border border-rose-500/50 p-4 rounded mb-4 space-y-2">
-                  <div className="font-bold text-rose-300 flex items-center gap-1.5">
-                    <AlertTriangle className="w-4 h-4" />
-                    <span>Alasan Penolakan Bukti Stiker:</span>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="Contoh: Admin tidak pernah mengirim stiker DONE pada jam tersebut / bukti editan"
-                    value={rejectReason}
-                    onChange={(e) => setRejectReason(e.target.value)}
-                    className="w-full bg-slate-950 border border-rose-500/50 rounded px-3 py-2 text-white placeholder-slate-500 focus:outline-none"
-                  />
-                  <div className="flex items-center justify-end gap-2 pt-1">
-                    <button
-                      onClick={() => setShowRejectDialog(false)}
-                      className="px-3 py-1 bg-slate-800 text-slate-300 rounded cursor-pointer"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      onClick={handleRejectConfirm}
-                      className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded cursor-pointer"
-                    >
-                      Konfirmasi Tolak
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
-                <button
-                  onClick={() => handleBlacklistFromReport(selectedReport)}
-                  className="px-3 py-2 bg-rose-950 hover:bg-rose-900 border border-rose-500/40 text-rose-300 font-bold rounded flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Ban className="w-4 h-4" />
-                  <span>Blacklist Tim Ini (Bukti Palsu)</span>
-                </button>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowRejectDialog(true)}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-rose-400 font-bold rounded cursor-pointer"
-                  >
-                    Tolak Storan
-                  </button>
-                  <button
-                    onClick={() => handleApprove(selectedReport)}
-                    className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded flex items-center gap-1.5 shadow-lg shadow-emerald-500/25 cursor-pointer"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>Approve (+1 Poin Otomatis)</span>
-                  </button>
-                </div>
+            <div className="mb-4 bg-black p-2 rounded-xl border border-blue-900 text-center">
+              <div className="max-h-96 overflow-hidden rounded-lg mx-auto">
+                <img
+                  src={selectedReport.screenshotUrl}
+                  alt="Bukti Chat GB"
+                  className="w-full h-auto object-contain max-h-96 mx-auto"
+                />
               </div>
             </div>
+
+            {selectedReport.status === 'PENDING' && (
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setShowRejectDialog(true)}
+                  className="px-4 py-2 bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-500/40 font-bold rounded-lg"
+                >
+                  Tolak Storan
+                </button>
+                <button
+                  onClick={() => handleApproveReport(selectedReport)}
+                  className="px-5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg shadow-lg"
+                >
+                  Sahkan & Tambah +1 Poin
+                </button>
+              </div>
+            )}
+
+            {showRejectDialog && (
+              <form onSubmit={handleRejectReport} className="mt-4 p-4 bg-[#030616] rounded-xl border border-rose-500/40 space-y-3">
+                <label className="block text-rose-300 font-bold">Alasan Penolakan Storan:</label>
+                <textarea
+                  required
+                  rows={2}
+                  placeholder="Contoh: Jam di screenshot tidak cocok dengan log kirim stiker DONE admin di grup GB."
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  className="w-full bg-[#070e28] border border-rose-500/50 rounded-lg p-2 text-white"
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowRejectDialog(false)}
+                    className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 bg-rose-600 text-white font-bold rounded"
+                  >
+                    Konfirmasi Tolak
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -7,12 +7,12 @@ export const CommunityInfoSection: React.FC = () => {
   const season = esportsStore.getSeason();
 
   return (
-    <section id="kontak" className="py-12 lg:py-16 bg-[#080c14] border-b border-slate-800/80">
+    <section id="kontak" className="py-12 lg:py-16 bg-[#080c14] border-b border-blue-900/60/80">
       <div className="max-w-7xl mx-auto px-4 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
           {/* Left Column: Official Info Channel & Consultation */}
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-950/60 border border-emerald-500/20 rounded text-xs font-mono text-emerald-400 mb-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-cyan-950/60 border border-cyan-400/20 rounded text-xs font-mono text-cyan-400 mb-3">
               <Radio className="w-3.5 h-3.5" />
               <span>SALURAN INFORMASI RESMI & KONSULTASI</span>
             </div>
@@ -30,20 +30,20 @@ export const CommunityInfoSection: React.FC = () => {
                 href={contacts.infoChannelLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between p-4 bg-slate-900 hover:bg-slate-850 border border-emerald-500/40 rounded-xl transition-all shadow-md group"
+                className="flex items-center justify-between p-4 bg-[#070f2c] hover:bg-slate-850 border border-cyan-400/40 rounded-xl transition-all shadow-md group"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
+                  <div className="w-10 h-10 rounded-lg bg-cyan-400 text-slate-950/20 border border-cyan-400/40 flex items-center justify-center text-cyan-400 shrink-0">
                     <Radio className="w-5 h-5" />
                   </div>
                   <div>
                     <div className="text-xs text-slate-400">Saluran Resmi WhatsApp</div>
-                    <div className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">
+                    <div className="text-sm font-bold text-white group-hover:text-cyan-400 transition-colors">
                       {contacts.infoChannelName}
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-950 px-3 py-1.5 rounded border border-emerald-500/30">
+                <div className="flex items-center gap-1 text-xs font-bold text-cyan-400 bg-cyan-950 px-3 py-1.5 rounded border border-cyan-400/30">
                   <span>Ikuti Saluran</span>
                   <ArrowUpRight className="w-3.5 h-3.5" />
                 </div>
@@ -54,7 +54,7 @@ export const CommunityInfoSection: React.FC = () => {
                 href={contacts.consultationWaUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between p-4 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 rounded-xl transition-all shadow-md group"
+                className="flex items-center justify-between p-4 bg-[#070f2c] hover:bg-slate-850 border border-blue-900/60 hover:border-amber-500/40 rounded-xl transition-all shadow-md group"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
@@ -80,7 +80,7 @@ export const CommunityInfoSection: React.FC = () => {
                   href={contacts.tiktokUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-between p-3.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-cyan-500/50 rounded-xl transition-all group"
+                  className="flex items-center justify-between p-3.5 bg-[#070f2c] hover:bg-slate-850 border border-blue-900/60 hover:border-cyan-500/50 rounded-xl transition-all group"
                 >
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-lg bg-cyan-950/80 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-bold text-xs">
@@ -101,7 +101,7 @@ export const CommunityInfoSection: React.FC = () => {
                   href={contacts.instagramUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-between p-3.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 hover:border-pink-500/50 rounded-xl transition-all group"
+                  className="flex items-center justify-between p-3.5 bg-[#070f2c] hover:bg-slate-850 border border-blue-900/60 hover:border-pink-500/50 rounded-xl transition-all group"
                 >
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-lg bg-pink-950/80 border border-pink-500/40 flex items-center justify-center text-pink-400 font-bold text-xs">
@@ -121,7 +121,7 @@ export const CommunityInfoSection: React.FC = () => {
           </div>
 
           {/* Right Column: Weekly Schedule & Group Explanation */}
-          <div className="bg-slate-950 border border-slate-800 rounded-xl p-6 sm:p-7">
+          <div className="bg-[#030616] border border-blue-900/60 rounded-xl p-6 sm:p-7">
             <div className="flex items-center gap-2 text-xs font-mono text-amber-400 font-bold uppercase mb-2">
               <Calendar className="w-4 h-4" />
               <span>JADWAL TURNAMEN: SEMINGGU SEKALI</span>
@@ -135,7 +135,7 @@ export const CommunityInfoSection: React.FC = () => {
 
             <div className="space-y-3 text-xs text-slate-300">
               <div className="flex items-start gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                 <div>
                   <strong className="text-white block">1. Daftar / Login Peserta</strong>
                   <span>Cukup masukkan Nomor WhatsApp, Nama Tim, dan Foto profil untuk identitas squad Anda.</span>
@@ -143,7 +143,7 @@ export const CommunityInfoSection: React.FC = () => {
               </div>
 
               <div className="flex items-start gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                 <div>
                   <strong className="text-white block">2. Kumpulkan Poin dari Fast Tournament</strong>
                   <span>Setiap kali menang FT di room yang dipantau panitia, screenshot chat saat admin kirim stiker <strong>DONE / CEK</strong> di GB lalu setorkan di website.</span>
@@ -151,7 +151,7 @@ export const CommunityInfoSection: React.FC = () => {
               </div>
 
               <div className="flex items-start gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                 <div>
                   <strong className="text-white block">3. Masuk 10 Besar di Akhir Minggu</strong>
                   <span>Tepat setiap Minggu malam, 10 tim dengan poin tertinggi otomatis diambil panitia.</span>
@@ -159,7 +159,7 @@ export const CommunityInfoSection: React.FC = () => {
               </div>
 
               <div className="flex items-start gap-2.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                 <div>
                   <strong className="text-white block">4. Dimasukkan ke Grup Khusus Turnamen Mingguan</strong>
                   <span>Admin langsung menghubungi nomor WhatsApp Anda untuk diundang ke grup khusus turnamen mingguan dan bertanding di sistem bagan gugur memperebutkan Rp 30.000!</span>
@@ -167,9 +167,9 @@ export const CommunityInfoSection: React.FC = () => {
               </div>
             </div>
 
-            <div className="mt-5 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 font-mono">
+            <div className="mt-5 pt-4 border-t border-blue-900/60/80 flex items-center justify-between text-xs text-slate-400 font-mono">
               <span>Prize: <strong className="text-amber-400">Rp 30.000</strong></span>
-              <span>Reset Otomatis: <strong className="text-emerald-400">Tiap Minggu 23:59 WIB</strong></span>
+              <span>Reset Otomatis: <strong className="text-cyan-400">Tiap Minggu 23:59 WIB</strong></span>
             </div>
           </div>
         </div>

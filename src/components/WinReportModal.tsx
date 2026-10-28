@@ -154,11 +154,11 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-xl w-full max-w-xl max-h-[92vh] overflow-y-auto shadow-2xl relative text-xs flex flex-col">
+      <div className="bg-[#070f2c] border border-blue-800/80 rounded-xl w-full max-w-xl max-h-[92vh] overflow-y-auto shadow-2xl relative text-xs flex flex-col">
         {/* Header */}
-        <div className="sticky top-0 bg-slate-900/95 backdrop-blur-sm border-b border-slate-800 p-4 sm:p-5 flex items-center justify-between z-10">
+        <div className="sticky top-0 bg-[#070f2c]/95 backdrop-blur-sm border-b border-blue-900/60 p-4 sm:p-5 flex items-center justify-between z-10">
           <div>
-            <div className="text-emerald-400 font-mono text-[11px] font-bold uppercase mb-0.5">
+            <div className="text-cyan-400 font-mono text-[11px] font-bold uppercase mb-0.5">
               SETORAN POIN KUALIFIKASI TOP 10
             </div>
             <h3 className="text-base font-bold font-display uppercase text-white">
@@ -199,7 +199,7 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                   onClose();
                   onOpenAuth();
                 }}
-                className="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg shadow-lg shadow-emerald-500/20 transition-all text-sm cursor-pointer"
+                className="px-6 py-2.5 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg shadow-lg shadow-cyan-500/20 transition-all text-sm cursor-pointer"
               >
                 Daftar / Login Peserta Sekarang
               </button>
@@ -208,13 +208,13 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
         ) : (
           <div className="flex-1 flex flex-col">
             {/* Nav Tabs: Submit vs History */}
-            <div className="px-5 pt-3 border-b border-slate-800 flex items-center gap-2 bg-slate-950/60">
+            <div className="px-5 pt-3 border-b border-blue-900/60 flex items-center gap-2 bg-[#030616]/60">
               <button
                 type="button"
                 onClick={() => setActiveTab('submit')}
                 className={`pb-2.5 px-3 font-bold text-xs flex items-center gap-1.5 border-b-2 transition-all cursor-pointer ${
                   activeTab === 'submit'
-                    ? 'border-emerald-400 text-emerald-400'
+                    ? 'border-cyan-400 text-cyan-400'
                     : 'border-transparent text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -227,7 +227,7 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                 onClick={() => setActiveTab('history')}
                 className={`pb-2.5 px-3 font-bold text-xs flex items-center gap-1.5 border-b-2 transition-all cursor-pointer ${
                   activeTab === 'history'
-                    ? 'border-emerald-400 text-emerald-400'
+                    ? 'border-cyan-400 text-cyan-400'
                     : 'border-transparent text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -253,16 +253,16 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                 )}
 
                 {/* Active User Card */}
-                <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-lg p-3 flex items-center justify-between">
+                <div className="bg-cyan-950/40 border border-cyan-500/30 rounded-lg p-3 flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
                     <img
                       src={currentParticipant.photoUrl}
                       alt={currentParticipant.name}
-                      className="w-9 h-9 rounded-full object-cover border border-emerald-500/60"
+                      className="w-9 h-9 rounded-full object-cover border border-cyan-400/60"
                     />
                     <div>
                       <div className="font-bold text-white text-xs">{currentParticipant.name}</div>
-                      <div className="text-[11px] font-mono text-emerald-400">
+                      <div className="text-[11px] font-mono text-cyan-400">
                         No WhatsApp: {currentParticipant.phone}
                       </div>
                     </div>
@@ -290,7 +290,7 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                 {/* Tanggal & Jam Storan Kemenangan */}
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                    <Clock className="w-3.5 h-3.5 text-cyan-400" />
                     <span>Tanggal & Jam Storan Kemenangan *</span>
                   </label>
                   <input
@@ -298,7 +298,7 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                     required
                     value={storanDate}
                     onChange={(e) => setStoranDate(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-emerald-500 text-xs"
+                    className="w-full bg-[#030616] border border-blue-900/60 rounded px-3 py-2 text-white font-mono focus:outline-none focus:border-cyan-400 text-xs"
                   />
                   <span className="text-[10px] text-slate-500">Waktu saat Anda mengajukan klaim kemenangan FT</span>
                 </div>
@@ -313,7 +313,7 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                     value={potName}
                     onChange={(e) => setPotName(e.target.value)}
                     placeholder="Contoh: Pot A FT Malam, Pot 1 Siang"
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-white focus:outline-none focus:border-emerald-500 text-xs"
+                    className="w-full bg-[#030616] border border-blue-900/60 rounded px-3 py-2 text-white focus:outline-none focus:border-cyan-400 text-xs"
                   />
                 </div>
 
@@ -321,18 +321,18 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                 <div>
                   <label className="block text-slate-200 font-bold mb-1 flex items-center justify-between">
                     <span>Upload Foto Chat GB (Stiker DONE / CEK Admin) *</span>
-                    <span className="text-[10px] font-mono text-emerald-400 font-normal">Format: Bukti Chat GB</span>
+                    <span className="text-[10px] font-mono text-cyan-400 font-normal">Format: Bukti Chat GB</span>
                   </label>
 
-                  <div className="border-2 border-dashed border-slate-700 hover:border-emerald-500/50 rounded-lg p-3.5 text-center transition-colors bg-slate-950/60">
+                  <div className="border-2 border-dashed border-blue-800 hover:border-cyan-400/50 rounded-lg p-3.5 text-center transition-colors bg-[#030616]/60">
                     {isCompressing ? (
-                      <div className="py-6 space-y-2 text-emerald-400 font-mono text-xs animate-pulse">
+                      <div className="py-6 space-y-2 text-cyan-400 font-mono text-xs animate-pulse">
                         <Upload className="w-6 h-6 mx-auto animate-bounce" />
                         <p>Mengompres dan memproses foto bukti menang...</p>
                       </div>
                     ) : screenshotUrl ? (
                       <div className="space-y-2">
-                        <div className="max-h-52 overflow-hidden rounded border border-emerald-500/50 mx-auto max-w-sm bg-black">
+                        <div className="max-h-52 overflow-hidden rounded border border-cyan-400/50 mx-auto max-w-sm bg-black">
                           <img
                             src={screenshotUrl}
                             alt="Bukti Stiker DONE di GB"
@@ -340,7 +340,7 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                           />
                         </div>
                         <div className="flex items-center justify-center gap-2">
-                          <span className="text-emerald-400 text-[11px] font-bold flex items-center gap-1">
+                          <span className="text-cyan-400 text-[11px] font-bold flex items-center gap-1">
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>Foto Bukti Chat GB Terpilih</span>
                           </span>
@@ -356,9 +356,9 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <Upload className="w-7 h-7 text-emerald-400 mx-auto" />
+                        <Upload className="w-7 h-7 text-cyan-400 mx-auto" />
                         <div className="text-slate-300 text-xs">
-                          <label className="text-emerald-400 hover:underline cursor-pointer font-bold block text-sm mb-1">
+                          <label className="text-cyan-400 hover:underline cursor-pointer font-bold block text-sm mb-1">
                             <span>Pilih Screenshot Chat GB dari Galeri HP</span>
                             <input
                               type="file"
@@ -371,14 +371,14 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                             Pastikan stiker <strong>DONE</strong> atau <strong>CEK</strong> dari panitia terlihat jelas di screenshot.
                           </p>
                         </div>
-                        <div className="pt-2 flex items-center justify-center gap-2 border-t border-slate-800/80">
+                        <div className="pt-2 flex items-center justify-center gap-2 border-t border-blue-900/60/80">
                           <span className="text-slate-500 text-[10px]">Contoh Bukti:</span>
                           <button
                             type="button"
                             onClick={useSampleDoneSticker}
                             className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] flex items-center gap-1 cursor-pointer"
                           >
-                            <ImageIcon className="w-3 h-3 text-emerald-400" />
+                            <ImageIcon className="w-3 h-3 text-cyan-400" />
                             <span>Pakai Contoh Stiker DONE Panitia</span>
                           </button>
                         </div>
@@ -388,14 +388,14 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                 </div>
 
                 {/* Checkbox Konfirmasi */}
-                <div className="bg-slate-950 p-2.5 rounded border border-slate-800 flex items-start gap-2">
+                <div className="bg-[#030616] p-2.5 rounded border border-blue-900/60 flex items-start gap-2">
                   <input
                     type="checkbox"
                     id="agreement-gb"
                     required
                     checked={agreementChecked}
                     onChange={(e) => setAgreementChecked(e.target.checked)}
-                    className="mt-0.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-500"
+                    className="mt-0.5 rounded border-blue-800 text-cyan-400 focus:ring-emerald-500"
                   />
                   <label htmlFor="agreement-gb" className="text-slate-300 leading-snug cursor-pointer text-[11px]">
                     Saya menyatakan screenshot chat di GB saat admin kirim stiker DONE/CEK ini adalah sah.
@@ -415,7 +415,7 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded flex items-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50 text-xs"
+                    className="px-5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded flex items-center gap-2 shadow-lg shadow-cyan-500/20 cursor-pointer disabled:opacity-50 text-xs"
                   >
                     {isSubmitting ? (
                       <span>Mengirim Storan...</span>
@@ -434,8 +434,8 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
             {activeTab === 'history' && (
               <div className="p-5 space-y-4">
                 {justSubmitted && (
-                  <div className="bg-gradient-to-r from-emerald-950/90 via-teal-950/80 to-slate-900 border border-emerald-400/60 rounded-xl p-3.5 text-xs shadow-xl flex items-start gap-3 animate-fade-in">
-                    <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/40">
+                  <div className="bg-gradient-to-r from-emerald-950/90 via-teal-950/80 to-slate-900 border border-cyan-400/60 rounded-xl p-3.5 text-xs shadow-xl flex items-start gap-3 animate-fade-in">
+                    <div className="w-8 h-8 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 border border-cyan-400/40">
                       <Sparkles className="w-4 h-4 fill-current animate-spin" />
                     </div>
                     <div className="flex-1">
@@ -459,7 +459,7 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setActiveTab('submit')}
-                    className="text-xs text-emerald-400 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                    className="text-xs text-cyan-400 hover:underline font-bold flex items-center gap-1 cursor-pointer"
                   >
                     <Send className="w-3 h-3" />
                     <span>+ Setor Lagi</span>
@@ -467,7 +467,7 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                 </div>
 
                 {userReports.length === 0 ? (
-                  <div className="p-6 text-center bg-slate-950/60 rounded-xl border border-slate-800 space-y-2">
+                  <div className="p-6 text-center bg-[#030616]/60 rounded-xl border border-blue-900/60 space-y-2">
                     <Clock className="w-6 h-6 text-slate-500 mx-auto" />
                     <div className="text-slate-300 font-bold">Belum Ada Storan Kemenangan</div>
                     <p className="text-slate-500 text-[11px]">
@@ -483,12 +483,12 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                           report.status === 'PENDING'
                             ? 'bg-amber-950/20 border-amber-500/50 shadow-sm shadow-amber-500/10'
                             : report.status === 'DONE'
-                            ? 'bg-emerald-950/20 border-emerald-500/40'
+                            ? 'bg-cyan-950/20 border-cyan-400/40'
                             : 'bg-rose-950/20 border-rose-500/40'
                         }`}
                       >
                         {/* Header: Sesi + VISUAL 'UNDER REVIEW' BADGE */}
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-800/80 mb-2.5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-blue-900/60/80 mb-2.5">
                           <div>
                             <div className="font-bold text-white text-xs">{report.potName}</div>
                             <div className="text-[10px] font-mono text-slate-400">
@@ -506,8 +506,8 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                             )}
 
                             {report.status === 'DONE' && (
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/60 shadow-sm">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black bg-cyan-500/20 text-cyan-300 border border-cyan-400/60 shadow-sm">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                                 <span>Verified (+1 Poin Sah)</span>
                               </span>
                             )}
@@ -527,7 +527,7 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                             src={report.screenshotUrl}
                             alt="Bukti Chat GB"
                             onClick={() => setSelectedPreviewImage(report.screenshotUrl)}
-                            className="w-16 h-14 rounded object-cover border border-slate-700 shrink-0 bg-black cursor-pointer hover:border-emerald-400 transition-colors"
+                            className="w-16 h-14 rounded object-cover border border-blue-800 shrink-0 bg-black cursor-pointer hover:border-cyan-400 transition-colors"
                             title="Klik untuk perbesar"
                           />
                           <div className="text-[11px] text-slate-300 space-y-1">
@@ -537,7 +537,7 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                               </p>
                             )}
                             {report.status === 'DONE' && (
-                              <p className="text-emerald-300/90 leading-tight font-medium">
+                              <p className="text-cyan-300/90 leading-tight font-medium">
                                 ✓ {report.adminNotes || 'Stiker DONE terverifikasi. +1 Poin berhasil masuk kualifikasi!'}
                               </p>
                             )}
@@ -563,7 +563,7 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
             className="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer"
             onClick={() => setSelectedPreviewImage(null)}
           >
-            <div className="relative max-w-lg bg-slate-950 border border-slate-700 rounded-lg p-2 overflow-hidden shadow-2xl">
+            <div className="relative max-w-lg bg-[#030616] border border-blue-800 rounded-lg p-2 overflow-hidden shadow-2xl">
               <div className="flex items-center justify-between pb-2 px-2 text-xs text-slate-300 font-mono">
                 <span>Bukti Chat Stiker DONE di GB</span>
                 <button

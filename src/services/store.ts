@@ -34,8 +34,8 @@ const calculateSeasonDates = (weekNum = 1) => {
 const defaultDates = calculateSeasonDates(1);
 
 const defaultSeason: Season = {
-  id: 'season-w1',
-  name: 'KLEPON WEEKLY TURNAMENT FREE - WEEK 1',
+  id: 'season-active',
+  name: 'KLEPON WEEKLY TURNAMENT FREE',
   weekNumber: 1,
   isActive: true,
   startDate: defaultDates.startDate,
@@ -68,22 +68,13 @@ const sampleAvatar = 'https://images.unsplash.com/photo-1566492031773-4f4e446718
 
 const defaultBanners: BannerPoster[] = [
   {
-    id: 'banner-01',
-    title: 'PAMFLET RESMI TURNAMEN MINGGUAN HADIAH 30K',
+    id: 'banner-klepon-main',
+    title: 'KLEPON WEEKLY TURNAMENT FREE',
     imageUrl: officialMainPosterUrl,
-    caption: 'Turnamen Gratis Free Fire Clash Squad Mingguan. Ambil Top 10 Poin Terbesar masuk babak gugur perebutan Total Rp 30.000 (Juara 1: 15k, Juara 2: 10k, Juara 3: 5k)!',
+    caption: 'Turnamen Gratis Free Fire Clash Squad Mingguan. Ambil Top 10 Poin Terbesar masuk babak gugur perebutan Total Hadiah Rp 30.000!',
     isMain: true,
     uploadedBy: 'Panitia KLEPON FT',
-    createdAt: '2026-10-26 20:00',
-  },
-  {
-    id: 'banner-02',
-    title: 'PANDUAN RESMI STORAN BUKTI STIKER DONE DI GB',
-    imageUrl: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80',
-    caption: 'Wajib screenshot chat di GB saat admin mengirimkan stiker DONE atau CEK. Jangan ada edit font atau manipulasi jam!',
-    isMain: false,
-    uploadedBy: 'Panitia KLEPON FT',
-    createdAt: '2026-10-25 18:00',
+    createdAt: new Date().toISOString().split('T')[0],
   },
 ];
 
@@ -501,10 +492,10 @@ class FirestoreEsportsStore {
         updatedAt: new Date().toISOString(),
       }));
 
-      const nextWeek = this.state.season.weekNumber + 1;
+      const nextWeek = (this.state.season.weekNumber || 1) + 1;
       const newDates = calculateSeasonDates(nextWeek);
       this.state.season.weekNumber = nextWeek;
-      this.state.season.name = `KLEPON WEEKLY TURNAMENT FREE - WEEK ${nextWeek}`;
+      this.state.season.name = 'KLEPON WEEKLY TURNAMENT FREE';
       this.state.season.startDate = newDates.startDate;
       this.state.season.endDate = newDates.endDate;
       this.state.season.lastAutoReset = new Date().toISOString();
@@ -962,10 +953,10 @@ class FirestoreEsportsStore {
       matchesPlayed: 0,
       updatedAt: new Date().toISOString(),
     }));
-    const nextWeek = this.state.season.weekNumber + 1;
+    const nextWeek = (this.state.season.weekNumber || 1) + 1;
     const newDates = calculateSeasonDates(nextWeek);
     this.state.season.weekNumber = nextWeek;
-    this.state.season.name = `KLEPON WEEKLY TURNAMENT FREE - WEEK ${nextWeek}`;
+    this.state.season.name = 'KLEPON WEEKLY TURNAMENT FREE';
     this.state.season.startDate = newDates.startDate;
     this.state.season.endDate = newDates.endDate;
     this.state.season.lastAutoReset = new Date().toISOString();
@@ -975,6 +966,73 @@ class FirestoreEsportsStore {
       setDoc(doc(db, 'players', p.id), p).catch(() => {});
     });
 
+    this.saveState();
+  }
+
+  public deleteParticipant(id: string): void {
+    const part = this.state.participants.find((p) => p.id === id);
+    const phone = part?.phone;
+    const name = part?.name;
+
+    this.state.participants = this.state.participants.filter((p) => p.id !== id);
+    this.state.players = this.state.players.filter((pl) => pl.id !== id && (!phone || pl.phone !== phone));
+
+    // Also remove their win reports
+    if (phone || name) {
+      this.state.winReports = this.state.winReports.filter(
+        (r) => (phone ? r.phone !== phone : true) && (name ? r.teamName.toLowerCase() !== name.toLowerCase() : true)
+      );
+    }
+
+    if (this.state.currentParticipant?.id === id) {
+      this.state.currentParticipant = null;
+    }
+
+    deleteDoc(doc(db, 'participants', id)).catch(() => {});
+    deleteDoc(doc(db, 'players', id)).catch(() => {});
+
+    this.saveState();
+  }
+
+  public updateParticipant(
+    id: string,
+    data: { name?: string; phone?: string; points?: number; wins?: number; matchesPlayed?: number; photoUrl?: string }
+  ): void {
+    const pIdx = this.state.participants.findIndex((p) => p.id === id);
+    if (pIdx !== -1) {
+      this.state.participants[pIdx] = {
+        ...this.state.participants[pIdx],
+        ...data,
+      };
+      setDoc(doc(db, 'participants', id), this.state.participants[pIdx]).catch(() => {});
+    }
+
+    const plIdx = this.state.players.findIndex((p) => p.id === id);
+    if (plIdx !== -1) {
+      this.state.players[plIdx] = {
+        ...this.state.players[plIdx],
+        name: data.name ?? this.state.players[plIdx].name,
+        captainName: data.name ?? this.state.players[plIdx].captainName,
+        phone: data.phone ?? this.state.players[plIdx].phone,
+        points: data.points ?? this.state.players[plIdx].points,
+        wins: data.wins ?? this.state.players[plIdx].wins,
+        matchesPlayed: data.matchesPlayed ?? this.state.players[plIdx].matchesPlayed,
+        photoUrl: data.photoUrl ?? this.state.players[plIdx].photoUrl,
+        updatedAt: new Date().toISOString(),
+      };
+      setDoc(doc(db, 'players', id), this.state.players[plIdx]).catch(() => {});
+    }
+
+    this.saveState();
+  }
+
+  public updateSeason(data: Partial<Season>): void {
+    this.state.season = {
+      ...this.state.season,
+      ...data,
+      name: 'KLEPON WEEKLY TURNAMENT FREE',
+    };
+    setDoc(doc(db, 'season', 'active'), this.state.season).catch(() => {});
     this.saveState();
   }
 
