@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   X, Upload, ShieldAlert, Image as ImageIcon, Send, Clock,
-  UserCheck, AlertTriangle, Lock, CheckCircle2, XCircle, ListFilter, Sparkles
+  UserCheck, AlertTriangle, Lock, CheckCircle2, XCircle, ListFilter, Sparkles, Eye
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { esportsStore } from '../services/store';
@@ -33,6 +33,9 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
   const [selectedPreviewImage, setSelectedPreviewImage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [justSubmitted, setJustSubmitted] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
+
+  const evidenceGuide = esportsStore.getEvidenceGuide();
 
   useEffect(() => {
     if (isOpen) {
@@ -98,12 +101,6 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
     }
   };
 
-  const useSampleDoneSticker = () => {
-    setScreenshotUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80');
-    setPotName('Pot A Fast Tournament (Stiker DONE Admin)');
-    setFormError(null);
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -116,6 +113,16 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
 
     if (!screenshotUrl) {
       setFormError('Harap unggah foto/screenshot di GB saat admin mengirimkan stiker DONE atau CEK!');
+      return;
+    }
+
+    // STRICT: Do not allow using sample images
+    if (
+      screenshotUrl === evidenceGuide.correctScreenshotUrl ||
+      screenshotUrl === evidenceGuide.wrongScreenshotUrl ||
+      screenshotUrl.includes('images.unsplash.com')
+    ) {
+      setFormError('DILARANG MENGGUNAKAN FOTO CONTOH ADMIN! Foto contoh hanya untuk panduan edukasi. Anda wajib memilih dan mengunggah screenshot asli kemenangan match FT Anda dari galeri HP.');
       return;
     }
 
@@ -371,15 +378,14 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                             Pastikan stiker <strong>DONE</strong> atau <strong>CEK</strong> dari panitia terlihat jelas di screenshot.
                           </p>
                         </div>
-                        <div className="pt-2 flex items-center justify-center gap-2 border-t border-blue-900/60/80">
-                          <span className="text-slate-500 text-[10px]">Contoh Bukti:</span>
+                        <div className="pt-2 flex items-center justify-center gap-2 border-t border-blue-900/60">
                           <button
                             type="button"
-                            onClick={useSampleDoneSticker}
-                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] flex items-center gap-1 cursor-pointer"
+                            onClick={() => setShowGuideModal(true)}
+                            className="px-3 py-1.5 bg-blue-950/90 hover:bg-blue-900 border border-cyan-500/40 text-cyan-300 rounded text-[11px] flex items-center gap-1.5 cursor-pointer transition-colors"
                           >
-                            <ImageIcon className="w-3 h-3 text-cyan-400" />
-                            <span>Pakai Contoh Stiker DONE Panitia</span>
+                            <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>Lihat Contoh Bukti SS GB (Hanya Contoh Edukasi)</span>
                           </button>
                         </div>
                       </div>
@@ -554,6 +560,80 @@ export const WinReportModal: React.FC<WinReportModalProps> = ({
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Modal Panduan Contoh Bukti SS GB (HANYA BISA DILIHAT - TIDAK BISA DIGUNAKAN UNTUK SETOR) */}
+        {showGuideModal && (
+          <div className="fixed inset-0 z-60 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-[#070f2c] border border-cyan-500/50 rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl text-xs space-y-4 animate-fade-in relative">
+              <div className="flex items-center justify-between pb-3 border-b border-blue-900/60">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-5 h-5 text-cyan-400" />
+                  <div>
+                    <h4 className="font-bold text-white text-sm uppercase">Panduan Contoh Bukti Chat GB (Stiker DONE)</h4>
+                    <p className="text-[10px] text-amber-400 font-mono">⚠️ HANYA CONTOH EDUKASI — TIDAK DAPAT DIGUNAKAN UNTUK SETORAN</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowGuideModal(false)}
+                  className="w-7 h-7 rounded-lg bg-blue-950 hover:bg-blue-900 text-slate-300 flex items-center justify-center cursor-pointer border border-blue-800"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* CONTOH BENAR */}
+                <div className="p-3.5 bg-[#030616] rounded-xl border border-emerald-500/50 space-y-2">
+                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-xs uppercase">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>CONTOH SS GB YANG BENAR (SAH)</span>
+                  </div>
+                  <div className="aspect-[4/3] rounded-lg overflow-hidden bg-black border border-emerald-900/60 flex items-center justify-center">
+                    <img
+                      src={evidenceGuide.correctScreenshotUrl}
+                      alt="Contoh Benar"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <div className="font-bold text-white text-xs">{evidenceGuide.correctTitle}</div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">{evidenceGuide.correctDescription}</p>
+                </div>
+
+                {/* CONTOH SALAH */}
+                <div className="p-3.5 bg-[#030616] rounded-xl border border-rose-500/50 space-y-2">
+                  <div className="flex items-center gap-1.5 text-rose-400 font-bold text-xs uppercase">
+                    <XCircle className="w-4 h-4" />
+                    <span>CONTOH SS GB YANG SALAH (PALSU)</span>
+                  </div>
+                  <div className="aspect-[4/3] rounded-lg overflow-hidden bg-black border border-rose-900/60 flex items-center justify-center">
+                    <img
+                      src={evidenceGuide.wrongScreenshotUrl}
+                      alt="Contoh Salah"
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                  <div className="font-bold text-white text-xs">{evidenceGuide.wrongTitle}</div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">{evidenceGuide.wrongDescription}</p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-950/40 border border-amber-500/40 rounded-xl text-amber-200 text-[11px] leading-relaxed">
+                💡 <strong>Perhatian:</strong> Foto di atas hanyalah referensi visual agar Anda mengetahui bukti yang sah. Anda <strong>wajib mengambil dan mengunggah screenshot asli</strong> dari grup chat WhatsApp Anda sendiri saat memenangkan match FT.
+              </div>
+
+              <div className="flex justify-end pt-2 border-t border-blue-900/60">
+                <button
+                  type="button"
+                  onClick={() => setShowGuideModal(false)}
+                  className="px-5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg cursor-pointer text-xs"
+                >
+                  Saya Mengerti, Tutup Panduan
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

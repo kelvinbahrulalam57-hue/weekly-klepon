@@ -95,3 +95,13 @@ export interface AdminContactInfo {
   whatsappGroupName?: string; // e.g. Grup Khusus Turnamen Mingguan Top 10
   whatsappGroupUrl?: string; // e.g. https://chat.whatsapp.com/...
 }
+
+export interface EvidenceGuideConfig {
+  correctScreenshotUrl: string;
+  correctTitle: string;
+  correctDescription: string;
+  wrongScreenshotUrl: string;
+  wrongTitle: string;
+  wrongDescription: string;
+  updatedAt: string;
+}

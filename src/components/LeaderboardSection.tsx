@@ -91,8 +91,10 @@ export const LeaderboardSection: React.FC = () => {
               <tbody className="divide-y divide-blue-950/60 text-xs">
                 {filteredPlayers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-500">
-                      Tidak ada tim yang cocok dengan pencarian "{searchQuery}".
+                    <td colSpan={6} className="py-12 text-center text-slate-500 font-mono">
+                      {searchQuery
+                        ? `Tidak ada tim yang cocok dengan pencarian "${searchQuery}".`
+                        : 'Belum ada tim peserta yang terdaftar atau klasemen kualifikasi masih kosong.'}
                     </td>
                   </tr>
                 ) : (

@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { ShieldAlert, AlertTriangle, CheckCircle, XCircle, Ban, MessageSquare } from 'lucide-react';
+import { ShieldAlert, AlertTriangle, CheckCircle, XCircle, Ban, MessageSquare, Eye, X } from 'lucide-react';
 import { esportsStore } from '../services/store';
 
 export const AntiCheatEducation: React.FC = () => {
   const [simulatorMode, setSimulatorMode] = useState<'real' | 'fake'>('fake');
   const [activeHotspot, setActiveHotspot] = useState<number | null>(1);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+
   const blacklist = esportsStore.getBlacklist();
+  const evidenceGuide = esportsStore.getEvidenceGuide();
 
   const fakeInspectionPoints = [
     {
@@ -176,6 +179,32 @@ export const AntiCheatEducation: React.FC = () => {
                   <span className="font-mono text-emerald-400">STATUS: MATCH TERVALIDASI</span>
                 </div>
 
+                {/* Actual Screenshot from Admin Evidence Guide */}
+                <div className="mt-3 p-3 bg-black/70 rounded-lg border border-slate-800 flex items-center gap-3">
+                  <img
+                    src={simulatorMode === 'real' ? evidenceGuide.correctScreenshotUrl : evidenceGuide.wrongScreenshotUrl}
+                    alt={simulatorMode === 'real' ? 'Contoh SS Benar' : 'Contoh SS Salah'}
+                    className="w-24 h-18 object-contain rounded border border-slate-700 bg-black cursor-pointer hover:opacity-90 transition-opacity shrink-0"
+                    onClick={() => setLightboxImage(simulatorMode === 'real' ? evidenceGuide.correctScreenshotUrl : evidenceGuide.wrongScreenshotUrl)}
+                  />
+                  <div className="flex-1 text-xs">
+                    <div className="font-bold text-white flex items-center gap-1.5">
+                      <span>{simulatorMode === 'real' ? evidenceGuide.correctTitle : evidenceGuide.wrongTitle}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 mt-0.5 line-clamp-2">
+                      {simulatorMode === 'real' ? evidenceGuide.correctDescription : evidenceGuide.wrongDescription}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setLightboxImage(simulatorMode === 'real' ? evidenceGuide.correctScreenshotUrl : evidenceGuide.wrongScreenshotUrl)}
+                      className="text-cyan-400 hover:underline text-[10px] font-mono mt-1 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>Perbesar Contoh Foto SS GB</span>
+                    </button>
+                  </div>
+                </div>
+
                 {simulatorMode === 'fake' && (
                   <div className="absolute inset-0 bg-rose-950/25 pointer-events-none border-2 border-rose-500/60 rounded flex items-center justify-center">
                     <div className="bg-rose-950/90 border border-rose-500 text-rose-300 text-xs px-3 py-1 font-mono font-bold tracking-wider rounded uppercase shadow-xl transform rotate-6">
@@ -270,28 +299,73 @@ export const AntiCheatEducation: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800 text-xs">
-                  {blacklist.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-rose-400">{entry.teamName}</div>
-                        <div className="text-slate-400 font-mono text-[11px]">Kapten: {entry.captainName}</div>
-                      </td>
-                      <td className="py-3 px-4 font-mono text-slate-300">{entry.phone}</td>
-                      <td className="py-3 px-4 text-slate-300">{entry.reason}</td>
-                      <td className="py-3 px-4 text-slate-400 font-mono text-[11px] max-w-xs">{entry.evidenceSummary}</td>
-                      <td className="py-3 px-4 text-center">
-                        <span className="inline-block px-2.5 py-1 bg-rose-950/80 border border-rose-500/40 text-rose-400 font-bold rounded text-[10px]">
-                          {entry.penalty}
-                        </span>
+                  {blacklist.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-500 font-mono text-xs">
+                        Belum ada tim atau nomor yang di-blacklist oleh admin.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    blacklist.map((entry) => (
+                      <tr key={entry.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-rose-400">{entry.teamName}</div>
+                          <div className="text-slate-400 font-mono text-[11px]">Kapten: {entry.captainName}</div>
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-300">{entry.phone}</td>
+                        <td className="py-3 px-4 text-slate-300">{entry.reason}</td>
+                        <td className="py-3 px-4 text-slate-400 font-mono text-[11px] max-w-xs">{entry.evidenceSummary}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="inline-block px-2.5 py-1 bg-rose-950/80 border border-rose-500/40 text-rose-400 font-bold rounded text-[10px]">
+                            {entry.penalty}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
+
+        {/* View-Only Lightbox for Evidence Screenshot */}
+        {lightboxImage && (
+          <div
+            className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm cursor-pointer"
+            onClick={() => setLightboxImage(null)}
+          >
+            <div
+              className="relative max-w-2xl w-full bg-slate-900 border border-slate-700 rounded-xl p-4 overflow-hidden shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-xs font-mono text-cyan-400 font-bold">
+                  Contoh Bukti SS GB Panitia (Hanya Contoh / Edukasi)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setLightboxImage(null)}
+                  className="text-slate-400 hover:text-white text-xs font-mono font-bold bg-slate-800 hover:bg-slate-700 px-2.5 py-1 rounded cursor-pointer transition-colors"
+                >
+                  ✕ Tutup
+                </button>
+              </div>
+              <img
+                src={lightboxImage}
+                alt="Bukti Preview"
+                className="w-full max-h-[70vh] object-contain rounded border border-slate-800 bg-black"
+              />
+              <div className="mt-3 p-2 bg-amber-950/40 border border-amber-500/40 rounded text-center">
+                <p className="text-[11px] text-amber-300 font-mono">
+                  ⚠️ <strong>PERINGATAN RESMI:</strong> Gambar ini murni contoh referensi dari admin panitia. Dilarang keras digunakan atau di-upload saat stor kemenangan! Sistem akan menolak bukti yang menggunakan gambar contoh ini.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
 };
+

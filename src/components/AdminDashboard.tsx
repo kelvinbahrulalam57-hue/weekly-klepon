@@ -3,10 +3,10 @@ import {
   Shield, CheckCircle, XCircle, Clock, Eye, Trophy, Users, AlertTriangle,
   RotateCcw, Save, ExternalLink, Search, Ban, Lock, LogOut, Check, Phone, ArrowLeft,
   MessageCircle, Send, Image as ImageIcon, Trash2, Plus, Sparkles, Upload, Edit2,
-  ShieldAlert, X, Gift
+  ShieldAlert, X, Gift, Copy
 } from 'lucide-react';
 import { esportsStore } from '../services/store';
-import { WinReport, ReportStatus, AdminContactInfo, PlayerTeam, BannerPoster, BlacklistEntry, ParticipantUser, Season } from '../types/esports';
+import { WinReport, ReportStatus, AdminContactInfo, PlayerTeam, BannerPoster, BlacklistEntry, ParticipantUser, Season, EvidenceGuideConfig } from '../types/esports';
 import { compressImage } from '../utils/imageCompressor';
 
 interface AdminDashboardProps {
@@ -27,7 +27,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
 
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
-  const [activeTab, setActiveTab] = useState<'queue' | 'top10_broadcast' | 'participants' | 'banners' | 'blacklist' | 'contacts' | 'season'>('queue');
+  const [activeTab, setActiveTab] = useState<'queue' | 'top10_broadcast' | 'participants' | 'banners' | 'evidence_guide' | 'blacklist' | 'contacts' | 'season'>('queue');
   const [statusFilter, setStatusFilter] = useState<ReportStatus | 'ALL'>('PENDING');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedReport, setSelectedReport] = useState<WinReport | null>(null);
@@ -50,6 +50,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
   const [editBannerImage, setEditBannerImage] = useState('');
   const [editBannerIsMain, setEditBannerIsMain] = useState(false);
   const [isEditBannerUploading, setIsEditBannerUploading] = useState(false);
+
+  // Evidence Guide (SS GB Benar vs Salah) state
+  const evidenceGuide = esportsStore.getEvidenceGuide();
+  const [guideForm, setGuideForm] = useState<EvidenceGuideConfig>(evidenceGuide);
+  const [isCorrectUploading, setIsCorrectUploading] = useState(false);
+  const [isWrongUploading, setIsWrongUploading] = useState(false);
 
   // In-app Confirmation Modal state (replacing window.confirm for iframe sandbox safety)
   const [confirmModal, setConfirmModal] = useState<{
@@ -95,6 +101,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
   useEffect(() => {
     setSeasonForm(season);
   }, [season.totalPrizePool, season.firstPrize, season.secondPrize, season.thirdPrize]);
+
+  useEffect(() => {
+    setGuideForm(evidenceGuide);
+  }, [
+    evidenceGuide.correctScreenshotUrl,
+    evidenceGuide.correctTitle,
+    evidenceGuide.correctDescription,
+    evidenceGuide.wrongScreenshotUrl,
+    evidenceGuide.wrongTitle,
+    evidenceGuide.wrongDescription,
+  ]);
 
   const totalReports = reports.length;
   const pendingCount = reports.filter((r) => r.status === 'PENDING').length;
@@ -238,6 +255,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
       confirmLabel: 'Ya, Hapus Poster',
       payload: b,
     });
+  };
+
+  const handleCopyBroadcastText = () => {
+    if (top10Players.length === 0) {
+      onNotify('Belum ada peserta terdaftar untuk dibroadcast.');
+      return;
+    }
+    const lines = [
+      '🏆 *PENGUMUMAN TOP 10 KUALIFIKASI TURNAMEN MINGGUAN KLEPON FT* 🏆',
+      `_Total Hadiah: ${season.totalPrizePool} · 100% GRATIS_`,
+      '',
+      '*Daftar 10 Tim Peraih Poin Terbesar yang Lolos ke Grup Khusus:*',
+      ...top10Players.map((p, i) => `${i + 1}. *${p.name}* (${p.captainName}) — *${p.points} Pts* (${p.wins} Win)`),
+      '',
+      '📌 *Catatan Penting:*',
+      'Tim di atas wajib bersiap di grup WhatsApp khusus bagan turnamen mingguan.',
+      'Ayo kumpulkan kemenangan match FT dan setor stiker DONE admin!',
+    ];
+    navigator.clipboard.writeText(lines.join('\n'));
+    onNotify('Teks broadcast Top 10 berhasil disalin ke clipboard! Siap kirim ke grup WhatsApp.');
+  };
+
+  const handleCorrectUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsCorrectUploading(true);
+      try {
+        const compressed = await compressImage(file, 960, 960, 0.8);
+        setGuideForm((prev) => ({ ...prev, correctScreenshotUrl: compressed }));
+        onNotify('Foto SS GB yang Benar berhasil dimuat.');
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsCorrectUploading(false);
+      }
+    }
+  };
+
+  const handleWrongUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsWrongUploading(true);
+      try {
+        const compressed = await compressImage(file, 960, 960, 0.8);
+        setGuideForm((prev) => ({ ...prev, wrongScreenshotUrl: compressed }));
+        onNotify('Foto SS GB yang Salah berhasil dimuat.');
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsWrongUploading(false);
+      }
+    }
+  };
+
+  const handleSaveEvidenceGuide = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!guideForm.correctScreenshotUrl || !guideForm.wrongScreenshotUrl) {
+      onNotify('Kedua foto bukti (Benar & Salah) tidak boleh kosong!');
+      return;
+    }
+    esportsStore.updateEvidenceGuide(guideForm);
+    onNotify('Contoh bukti SS GB (Benar vs Salah) berhasil disimpan dan langsung realtime ke seluruh pengunjung!');
   };
 
   const handleSaveContacts = (e: React.FormEvent) => {
@@ -527,6 +606,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
         </button>
 
         <button
+          onClick={() => setActiveTab('evidence_guide')}
+          className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'evidence_guide'
+              ? 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-md shadow-cyan-500/20'
+              : 'bg-[#070e28] text-slate-300 hover:bg-[#0a153c] border border-blue-900/50'
+          }`}
+        >
+          <ShieldAlert className="w-4 h-4" />
+          <span>Kelola SS GB (Benar vs Salah)</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('blacklist')}
           className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all cursor-pointer ${
             activeTab === 'blacklist'
@@ -711,58 +802,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
       {activeTab === 'top10_broadcast' && (
         <div className="space-y-4">
           <div className="bg-[#070f2c]/90 border border-blue-900/60 rounded-2xl p-5 shadow-2xl">
-            <h3 className="text-base font-bold uppercase font-display text-white mb-1 flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-amber-400" />
-              <span>Daftar Tim Lolos Top 10 Turnamen Mingguan</span>
-            </h3>
-            <p className="text-xs text-slate-400 mb-4">
-              Hubungi 10 tim peraih poin terbesar untuk dimasukkan ke grup khusus turnamen mingguan.
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-blue-900/60">
+              <div>
+                <h3 className="text-base font-bold uppercase font-display text-white flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-amber-400" />
+                  <span>Daftar Tim Lolos Top 10 Turnamen Mingguan ({top10Players.length})</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Hubungi 10 tim peraih poin terbesar sesuai urutan daftar peserta untuk dimasukkan ke grup khusus turnamen mingguan.
+                </p>
+              </div>
 
-            <div className="space-y-3">
-              {top10Players.map((player, idx) => {
-                const inviteUrl = esportsStore.getTop10InviteLink(player, idx + 1);
-                const isContacted = contactedTeams[player.id];
+              <button
+                onClick={handleCopyBroadcastText}
+                className="px-3.5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-md shrink-0"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Salin Teks Broadcast WA</span>
+              </button>
+            </div>
 
-                return (
-                  <div
-                    key={player.id}
-                    className="p-3.5 bg-[#030616] rounded-xl border border-blue-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-cyan-400 text-slate-950 font-black font-mono flex items-center justify-center text-xs">
-                        #{idx + 1}
-                      </div>
-                      <div>
-                        <div className="font-bold text-white text-sm">{player.name}</div>
-                        <div className="text-[11px] font-mono text-cyan-400">
-                          Kapten: {player.captainName} · WA: {player.phone} · Poin: {player.points} Pts
+            {top10Players.length === 0 ? (
+              <div className="p-8 text-center bg-[#030616] rounded-xl border border-blue-900/40 text-slate-400 space-y-2">
+                <Trophy className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                <p className="font-bold text-white text-sm">Tidak Ada Peserta yang Terdaftar</p>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Daftar broadcast Top 10 mengikuti urutan daftar peserta aktif. Jika seluruh daftar peserta dihapus, daftar broadcast otomatis kosong dan bersih.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {top10Players.map((player, idx) => {
+                  const inviteUrl = esportsStore.getTop10InviteLink(player, idx + 1);
+                  const isContacted = contactedTeams[player.id];
+
+                  return (
+                    <div
+                      key={player.id}
+                      className="p-3.5 bg-[#030616] rounded-xl border border-blue-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-cyan-400 text-slate-950 font-black font-mono flex items-center justify-center text-xs">
+                          #{idx + 1}
+                        </div>
+                        <div>
+                          <div className="font-bold text-white text-sm">{player.name}</div>
+                          <div className="text-[11px] font-mono text-cyan-400">
+                            Kapten: {player.captainName} · WA: {player.phone} · Poin: {player.points} Pts ({player.wins} Win)
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={inviteUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => setContactedTeams((prev) => ({ ...prev, [player.id]: true }))}
-                        className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 shadow"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5 fill-current" />
-                        <span>Chat WhatsApp Tim</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                      {isContacted && (
-                        <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950 px-2 py-1 rounded border border-cyan-500/30">
-                          ✓ Terkirim
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={inviteUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setContactedTeams((prev) => ({ ...prev, [player.id]: true }))}
+                          className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 shadow"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                          <span>Chat WhatsApp Tim</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                        {isContacted && (
+                          <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950 px-2 py-1 rounded border border-cyan-500/30">
+                            ✓ Terkirim
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1244,6 +1357,189 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
         </div>
       )}
 
+      {/* TAB: Kelola SS GB (Benar vs Salah) */}
+      {activeTab === 'evidence_guide' && (
+        <div className="bg-[#070f2c]/90 border border-blue-900/60 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-6">
+          <div className="pb-4 border-b border-blue-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold uppercase font-display text-white flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-cyan-400" />
+                <span>Kelola Contoh Screenshot Bukti GB (Benar vs Salah)</span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Admin dapat mengunggah dan mengedit foto contoh bukti chat GB yang SAH/BENAR (stiker DONE asli panitia) dan contoh yang SALAH/PALSU (crop, editan, copas).
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSaveEvidenceGuide} className="space-y-6 text-xs">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* CARD 1: SS GB YANG BENAR */}
+              <div className="bg-[#030616] border-2 border-emerald-500/50 rounded-2xl p-5 space-y-4 shadow-xl relative overflow-hidden">
+                <div className="flex items-center justify-between pb-3 border-b border-emerald-900/50">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <h4 className="font-bold text-emerald-400 uppercase text-xs tracking-wider">
+                      1. Contoh SS GB yang BENAR (Sah & Valid)
+                    </h4>
+                  </div>
+                  <span className="bg-emerald-950 text-emerald-300 text-[10px] font-mono px-2 py-0.5 rounded border border-emerald-500/40">
+                    SAH +1 POIN
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Foto Screenshot Chat GB yang Benar *
+                    </label>
+                    <div className="border border-emerald-800/80 rounded-xl p-3 bg-black/50 flex flex-col sm:flex-row items-center gap-3">
+                      <img
+                        src={guideForm.correctScreenshotUrl}
+                        alt="Contoh SS Benar"
+                        className="w-36 h-28 object-contain rounded-lg border border-emerald-600/60 bg-black flex-shrink-0"
+                      />
+                      <div className="space-y-2 text-center sm:text-left">
+                        <label className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded text-xs inline-flex items-center gap-1.5 cursor-pointer shadow">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Ganti Foto dari Galeri</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleCorrectUpload}
+                            className="hidden"
+                          />
+                        </label>
+                        {isCorrectUploading && (
+                          <p className="text-[10px] text-emerald-300 font-mono">Mengompres foto...</p>
+                        )}
+                        <p className="text-[10px] text-slate-400">
+                          Foto bukti chat grup WhatsApp saat admin mengirimkan stiker DONE/CEK secara resmi.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Judul Keterangan Bukti Benar
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={guideForm.correctTitle}
+                      onChange={(e) => setGuideForm({ ...guideForm, correctTitle: e.target.value })}
+                      className="w-full bg-[#070e28] border border-blue-900 rounded-lg px-3 py-2 text-white font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Deskripsi Panduan Bukti Benar
+                    </label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={guideForm.correctDescription}
+                      onChange={(e) => setGuideForm({ ...guideForm, correctDescription: e.target.value })}
+                      className="w-full bg-[#070e28] border border-blue-900 rounded-lg px-3 py-2 text-white leading-relaxed"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 2: SS GB YANG SALAH */}
+              <div className="bg-[#030616] border-2 border-rose-500/50 rounded-2xl p-5 space-y-4 shadow-xl relative overflow-hidden">
+                <div className="flex items-center justify-between pb-3 border-b border-rose-900/50">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-400 animate-pulse"></span>
+                    <h4 className="font-bold text-rose-400 uppercase text-xs tracking-wider">
+                      2. Contoh SS GB yang SALAH / PALSU (Dilarang)
+                    </h4>
+                  </div>
+                  <span className="bg-rose-950 text-rose-300 text-[10px] font-mono px-2 py-0.5 rounded border border-rose-500/40">
+                    AUTO BLACKLIST
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Foto Screenshot Chat GB yang Salah *
+                    </label>
+                    <div className="border border-rose-800/80 rounded-xl p-3 bg-black/50 flex flex-col sm:flex-row items-center gap-3">
+                      <img
+                        src={guideForm.wrongScreenshotUrl}
+                        alt="Contoh SS Salah"
+                        className="w-36 h-28 object-contain rounded-lg border border-rose-600/60 bg-black flex-shrink-0"
+                      />
+                      <div className="space-y-2 text-center sm:text-left">
+                        <label className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded text-xs inline-flex items-center gap-1.5 cursor-pointer shadow">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Ganti Foto dari Galeri</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleWrongUpload}
+                            className="hidden"
+                          />
+                        </label>
+                        {isWrongUploading && (
+                          <p className="text-[10px] text-rose-300 font-mono">Mengompres foto...</p>
+                        )}
+                        <p className="text-[10px] text-slate-400">
+                          Foto contoh bukti palsu, jam chat dipotong, editan inspect element, atau stiker copas.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Judul Keterangan Bukti Salah
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={guideForm.wrongTitle}
+                      onChange={(e) => setGuideForm({ ...guideForm, wrongTitle: e.target.value })}
+                      className="w-full bg-[#070e28] border border-blue-900 rounded-lg px-3 py-2 text-white font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Deskripsi Panduan Bukti Salah
+                    </label>
+                    <textarea
+                      rows={3}
+                      required
+                      value={guideForm.wrongDescription}
+                      onChange={(e) => setGuideForm({ ...guideForm, wrongDescription: e.target.value })}
+                      className="w-full bg-[#070e28] border border-blue-900 rounded-lg px-3 py-2 text-white leading-relaxed"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-[#030616] rounded-xl border border-blue-900/60">
+              <div className="text-slate-400 text-xs">
+                💡 Perubahan foto & keterangan ini langsung tersimpan ke database Firestore dan tampil di panduan halaman utama serta popup contoh setoran pemain.
+              </div>
+              <button
+                type="submit"
+                disabled={isCorrectUploading || isWrongUploading}
+                className="px-6 py-2.5 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg cursor-pointer shadow-lg shadow-cyan-500/20 flex items-center gap-2 shrink-0"
+              >
+                <Save className="w-4 h-4" />
+                <span>Simpan Perubahan Bukti SS GB</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* TAB 5: Blacklist */}
       {activeTab === 'blacklist' && (
         <div className="space-y-4">
@@ -1318,36 +1614,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
               </form>
             )}
 
-            <div className="space-y-3">
-              {blacklist.map((entry) => (
-                <div key={entry.id} className="p-4 bg-[#030616] rounded-xl border border-rose-950/60 flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-bold text-rose-400 text-sm">{entry.teamName}</span>
-                      <span className="text-slate-400 font-mono text-xs ml-2">({entry.phone})</span>
+            {blacklist.length === 0 ? (
+              <div className="p-8 text-center bg-[#030616] rounded-xl border border-blue-900/40 text-slate-400 space-y-2">
+                <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                <p className="font-bold text-white text-sm">Tidak Ada Tim di Daftar Blacklist</p>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Seluruh tim bertanding secara jujur tanpa catatan sanksi pemalsuan stiker DONE.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {blacklist.map((entry) => (
+                  <div key={entry.id} className="p-4 bg-[#030616] rounded-xl border border-rose-950/60 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-rose-400 text-sm">{entry.teamName}</span>
+                        <span className="text-slate-400 font-mono text-xs ml-2">({entry.phone})</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setEditingBlEntry(entry)}
+                          className="px-2.5 py-1 bg-blue-950 hover:bg-blue-900 border border-blue-500/40 text-cyan-300 rounded text-xs flex items-center gap-1 cursor-pointer"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBlacklist(entry)}
+                          className="px-2.5 py-1 bg-rose-950/80 hover:bg-rose-900 border border-rose-500/40 text-rose-300 rounded text-xs flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Hapus</span>
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setEditingBlEntry(entry)}
-                        className="text-cyan-400 hover:underline text-xs"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteBlacklist(entry)}
-                        className="text-rose-400 hover:underline text-xs"
-                      >
-                        Hapus
-                      </button>
+                    <p className="text-slate-300 text-xs"><strong>Alasan:</strong> {entry.reason}</p>
+                    <div className="text-[11px] font-mono text-rose-300">
+                      Sanksi: {entry.penalty}
                     </div>
                   </div>
-                  <p className="text-slate-300 text-xs"><strong>Alasan:</strong> {entry.reason}</p>
-                  <div className="text-[11px] font-mono text-rose-300">
-                    Sanksi: {entry.penalty}
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

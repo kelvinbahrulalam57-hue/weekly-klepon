@@ -1,6 +1,7 @@
 import {
   PlayerTeam, WinReport, Season, BlacklistEntry,
-  AdminContactInfo, MatchGame, ParticipantUser, BannerPoster
+  AdminContactInfo, MatchGame, ParticipantUser, BannerPoster,
+  EvidenceGuideConfig
 } from '../types/esports';
 import { db } from './firebase';
 import {
@@ -65,6 +66,16 @@ const defaultContacts: AdminContactInfo = {
 const officialMainPosterUrl = '/src/assets/images/klepon_hero_esports_1793070950068.jpg';
 const sampleDoneStickerUrl = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80';
 const sampleAvatar = 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?auto=format&fit=crop&w=200&q=80';
+
+export const defaultEvidenceGuide: EvidenceGuideConfig = {
+  correctScreenshotUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80',
+  correctTitle: 'Stiker DONE Resmi Admin di Jam yang Cocok (Sah & Valid)',
+  correctDescription: 'Screenshot penuh chat grup WhatsApp GB yang memuat pengiriman stiker DONE / CEK dari admin resmi di jam yang cocok, tanpa sensor/crop dan tanpa editan.',
+  wrongScreenshotUrl: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=800&q=80',
+  wrongTitle: 'Stiker Copas / Editan / Jam Dipotong (Palsu - Auto Blacklist)',
+  wrongDescription: 'Screenshot chat palsu, stiker copas dari turnamen lain, jam dipotong, inspect element WA Web, atau screenshot lobi FF. Langsung dibanned permanen!',
+  updatedAt: new Date().toISOString(),
+};
 
 const defaultBanners: BannerPoster[] = [
   {
@@ -273,6 +284,7 @@ interface AppState {
   banners: BannerPoster[];
   blacklist: BlacklistEntry[];
   contacts: AdminContactInfo;
+  evidenceGuide: EvidenceGuideConfig;
   isAdminLoggedIn: boolean;
   isFirestoreSyncing: boolean;
 }
@@ -296,10 +308,11 @@ class FirestoreEsportsStore {
           season: { ...defaultSeason, ...(parsed.season || {}) },
           contacts: { ...defaultContacts, ...(parsed.contacts || {}) },
           banners: Array.isArray(parsed.banners) && parsed.banners.length > 0 ? parsed.banners : defaultBanners,
-          players: Array.isArray(parsed.players) && parsed.players.length > 0 ? parsed.players : defaultPlayers,
-          participants: Array.isArray(parsed.participants) && parsed.participants.length > 0 ? parsed.participants : defaultParticipants,
+          players: Array.isArray(parsed.players) ? parsed.players : defaultPlayers,
+          participants: Array.isArray(parsed.participants) ? parsed.participants : defaultParticipants,
           winReports: Array.isArray(parsed.winReports) ? parsed.winReports : defaultWinReports,
-          blacklist: Array.isArray(parsed.blacklist) && parsed.blacklist.length > 0 ? parsed.blacklist : defaultBlacklist,
+          blacklist: Array.isArray(parsed.blacklist) ? parsed.blacklist : defaultBlacklist,
+          evidenceGuide: parsed.evidenceGuide ? { ...defaultEvidenceGuide, ...parsed.evidenceGuide } : defaultEvidenceGuide,
           currentParticipant: this.loadParticipant(),
           isAdminLoggedIn: false,
           isFirestoreSyncing: true,
@@ -318,6 +331,7 @@ class FirestoreEsportsStore {
       banners: defaultBanners,
       blacklist: defaultBlacklist,
       contacts: defaultContacts,
+      evidenceGuide: defaultEvidenceGuide,
       isAdminLoggedIn: false,
       isFirestoreSyncing: true,
     };
@@ -444,20 +458,10 @@ class FirestoreEsportsStore {
 
       // 5. Listen to Blacklist
       onSnapshot(collection(db, 'blacklist'), (snapshot: QuerySnapshot) => {
-        if (!snapshot.empty) {
-          const remoteBl: BlacklistEntry[] = [];
-          snapshot.forEach((d: QueryDocumentSnapshot) => remoteBl.push(d.data() as BlacklistEntry));
-          this.state.blacklist = remoteBl;
-          this.saveState();
-        } else {
-          defaultBlacklist.forEach(async (bl) => {
-            try {
-              await setDoc(doc(db, 'blacklist', bl.id), bl);
-            } catch {
-              // ignore
-            }
-          });
-        }
+        const remoteBl: BlacklistEntry[] = [];
+        snapshot.forEach((d: QueryDocumentSnapshot) => remoteBl.push(d.data() as BlacklistEntry));
+        this.state.blacklist = remoteBl;
+        this.saveState();
       }, (err: FirestoreError) => {
         console.warn('Firestore blacklist realtime fallback:', err.message);
       });
@@ -472,6 +476,28 @@ class FirestoreEsportsStore {
         }
       }, (err: FirestoreError) => {
         console.warn('Firestore contacts realtime fallback:', err.message);
+      });
+
+      // 7. Listen to Participants (Realtime Sync & Deletion)
+      onSnapshot(collection(db, 'participants'), (snapshot: QuerySnapshot) => {
+        const remoteParticipants: ParticipantUser[] = [];
+        snapshot.forEach((d: QueryDocumentSnapshot) => remoteParticipants.push(d.data() as ParticipantUser));
+        this.state.participants = remoteParticipants;
+        this.saveState();
+      }, (err: FirestoreError) => {
+        console.warn('Firestore participants realtime fallback:', err.message);
+      });
+
+      // 8. Listen to Evidence Guide Config (SS GB Benar vs Salah)
+      onSnapshot(doc(db, 'config', 'evidenceGuide'), (snapshot: DocumentSnapshot) => {
+        if (snapshot.exists()) {
+          this.state.evidenceGuide = { ...defaultEvidenceGuide, ...(snapshot.data() as EvidenceGuideConfig) };
+          this.saveState();
+        } else {
+          setDoc(doc(db, 'config', 'evidenceGuide'), defaultEvidenceGuide).catch(() => {});
+        }
+      }, (err: FirestoreError) => {
+        console.warn('Firestore evidenceGuide realtime fallback:', err.message);
       });
     } catch (e) {
       console.warn('Firestore init error, running local reactive bridge:', e);
@@ -522,7 +548,7 @@ class FirestoreEsportsStore {
   }
 
   public getParticipants(): ParticipantUser[] {
-    return Array.isArray(this.state.participants) ? this.state.participants : defaultParticipants;
+    return Array.isArray(this.state.participants) ? this.state.participants : [];
   }
 
   public getCurrentParticipant(): ParticipantUser | null {
@@ -530,16 +556,25 @@ class FirestoreEsportsStore {
   }
 
   public getPlayers(): PlayerTeam[] {
-    const rawList = Array.isArray(this.state.players) ? this.state.players : defaultPlayers;
-    return [...rawList].map((p) => ({
-      ...p,
+    // Strictly synchronized with registered participants
+    const participants = this.getParticipants();
+    if (!participants || participants.length === 0) {
+      return [];
+    }
+
+    return participants.map((p) => ({
+      id: p.id,
       name: p.name || 'Tim Tanpa Nama',
-      tag: p.tag || 'FF',
-      captainName: p.captainName || p.name || 'Kapten',
+      tag: (p.name.trim().slice(0, 3) || 'FT').toUpperCase(),
+      captainName: p.name || 'Kapten',
       phone: p.phone || '',
       points: Number(p.points) || 0,
       wins: Number(p.wins) || 0,
       matchesPlayed: Number(p.matchesPlayed) || 0,
+      game: 'Free Fire Clash Squad' as const,
+      status: 'active' as const,
+      photoUrl: p.photoUrl,
+      updatedAt: p.registeredAt || new Date().toISOString(),
     })).sort((a, b) => b.points - a.points || b.wins - a.wins);
   }
 
@@ -581,7 +616,27 @@ class FirestoreEsportsStore {
   }
 
   public getBlacklist(): BlacklistEntry[] {
-    return Array.isArray(this.state.blacklist) ? this.state.blacklist : defaultBlacklist;
+    return Array.isArray(this.state.blacklist) ? this.state.blacklist : [];
+  }
+
+  public getEvidenceGuide(): EvidenceGuideConfig {
+    return this.state.evidenceGuide || defaultEvidenceGuide;
+  }
+
+  public updateEvidenceGuide(data: Partial<EvidenceGuideConfig>): void {
+    this.state.evidenceGuide = {
+      ...this.getEvidenceGuide(),
+      ...data,
+      updatedAt: new Date().toISOString(),
+    };
+    try {
+      setDoc(doc(db, 'config', 'evidenceGuide'), this.state.evidenceGuide, { merge: true }).catch((err) => {
+        console.warn('Evidence guide update error:', err);
+      });
+    } catch {
+      // ignore
+    }
+    this.saveState();
   }
 
   public getContacts(): AdminContactInfo {
