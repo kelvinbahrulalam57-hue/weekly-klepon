@@ -511,11 +511,33 @@ class FirestoreEsportsStore {
     const end = new Date(this.state.season.endDate + 'T23:59:59');
 
     if (now.getTime() > end.getTime()) {
+      // 1. Reset points on all participants (DO NOT DELETE PARTICIPANTS!)
+      this.state.participants = this.state.participants.map((p) => ({
+        ...p,
+        points: 0,
+        wins: 0,
+        matchesPlayed: 0,
+        streak: 0,
+      }));
+
+      // 2. Also reset current active participant points if logged in
+      if (this.state.currentParticipant) {
+        this.state.currentParticipant = {
+          ...this.state.currentParticipant,
+          points: 0,
+          wins: 0,
+          matchesPlayed: 0,
+          streak: 0,
+        };
+      }
+
+      // 3. Reset players
       this.state.players = this.state.players.map((p) => ({
         ...p,
         points: 0,
         wins: 0,
         matchesPlayed: 0,
+        streak: 0,
         updatedAt: new Date().toISOString(),
       }));
 
@@ -527,11 +549,14 @@ class FirestoreEsportsStore {
       this.state.season.endDate = newDates.endDate;
       this.state.season.lastAutoReset = new Date().toISOString();
 
-      // Sync to Firestore
+      // Sync to Firestore: update season, participants, and players
       try {
-        setDoc(doc(db, 'season', 'active'), this.state.season);
+        setDoc(doc(db, 'season', 'active'), this.state.season).catch(() => {});
+        this.state.participants.forEach((p) => {
+          setDoc(doc(db, 'participants', p.id), p, { merge: true }).catch(() => {});
+        });
         this.state.players.forEach((p) => {
-          setDoc(doc(db, 'players', p.id), p);
+          setDoc(doc(db, 'players', p.id), p, { merge: true }).catch(() => {});
         });
       } catch {
         // ignore
@@ -541,6 +566,36 @@ class FirestoreEsportsStore {
       return true;
     }
     return false;
+  }
+
+  // Calculate current consecutive win streak for a team
+  public calculateTeamStreak(phone: string, teamName?: string, currentWins: number = 0, explicitStreak?: number): number {
+    if (explicitStreak !== undefined && explicitStreak >= 0) {
+      return explicitStreak;
+    }
+
+    const cleanPhone = (phone || '').trim().toLowerCase();
+    const cleanName = (teamName || '').trim().toLowerCase();
+
+    const reports = (this.state.winReports || []).filter((r) => {
+      const matchPhone = cleanPhone && (r.phone || '').trim().toLowerCase() === cleanPhone;
+      const matchName = cleanName && (r.teamName || '').trim().toLowerCase() === cleanName;
+      return matchPhone || matchName;
+    }).sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+
+    if (reports.length > 0) {
+      let streak = 0;
+      for (const rep of reports) {
+        if (rep.status === 'DONE') {
+          streak += 1;
+        } else if (rep.status === 'REJECTED') {
+          break;
+        }
+      }
+      return streak;
+    }
+
+    return currentWins > 0 ? Math.min(currentWins, 5) : 0;
   }
 
   // Getters
@@ -563,20 +618,25 @@ class FirestoreEsportsStore {
       return [];
     }
 
-    return participants.map((p) => ({
-      id: p.id,
-      name: p.name || 'Tim Tanpa Nama',
-      tag: (p.name.trim().slice(0, 3) || 'FT').toUpperCase(),
-      captainName: p.name || 'Kapten',
-      phone: p.phone || '',
-      points: Number(p.points) || 0,
-      wins: Number(p.wins) || 0,
-      matchesPlayed: Number(p.matchesPlayed) || 0,
-      game: 'Free Fire Clash Squad' as const,
-      status: 'active' as const,
-      photoUrl: p.photoUrl,
-      updatedAt: p.registeredAt || new Date().toISOString(),
-    })).sort((a, b) => b.points - a.points || b.wins - a.wins);
+    return participants.map((p) => {
+      const wins = Number(p.wins) || 0;
+      const streak = this.calculateTeamStreak(p.phone, p.name, wins, p.streak);
+      return {
+        id: p.id,
+        name: p.name || 'Tim Tanpa Nama',
+        tag: (p.name.trim().slice(0, 3) || 'FT').toUpperCase(),
+        captainName: p.name || 'Kapten',
+        phone: p.phone || '',
+        points: Number(p.points) || 0,
+        wins: wins,
+        matchesPlayed: Number(p.matchesPlayed) || 0,
+        streak: streak,
+        game: 'Free Fire Clash Squad' as const,
+        status: 'active' as const,
+        photoUrl: p.photoUrl,
+        updatedAt: p.registeredAt || new Date().toISOString(),
+      };
+    }).sort((a, b) => b.points - a.points || b.wins - a.wins);
   }
 
   public getTop10Players(): PlayerTeam[] {
@@ -1234,13 +1294,36 @@ class FirestoreEsportsStore {
   }
 
   public manualResetSeason(): void {
+    // 1. Reset points on all participants (DO NOT DELETE PARTICIPANTS! Participants remain registered)
+    this.state.participants = this.state.participants.map((p) => ({
+      ...p,
+      points: 0,
+      wins: 0,
+      matchesPlayed: 0,
+      streak: 0,
+    }));
+
+    // 2. Also reset current logged in participant points without logging out
+    if (this.state.currentParticipant) {
+      this.state.currentParticipant = {
+        ...this.state.currentParticipant,
+        points: 0,
+        wins: 0,
+        matchesPlayed: 0,
+        streak: 0,
+      };
+    }
+
+    // 3. Reset players
     this.state.players = this.state.players.map((p) => ({
       ...p,
       points: 0,
       wins: 0,
       matchesPlayed: 0,
+      streak: 0,
       updatedAt: new Date().toISOString(),
     }));
+
     const nextWeek = (this.state.season.weekNumber || 1) + 1;
     const newDates = calculateSeasonDates(nextWeek);
     this.state.season.weekNumber = nextWeek;
@@ -1249,10 +1332,18 @@ class FirestoreEsportsStore {
     this.state.season.endDate = newDates.endDate;
     this.state.season.lastAutoReset = new Date().toISOString();
 
-    setDoc(doc(db, 'season', 'active'), this.state.season).catch(() => {});
-    this.state.players.forEach((p) => {
-      setDoc(doc(db, 'players', p.id), p).catch(() => {});
-    });
+    // Persist to Firestore: update season, participants, and players
+    try {
+      setDoc(doc(db, 'season', 'active'), this.state.season).catch(() => {});
+      this.state.participants.forEach((p) => {
+        setDoc(doc(db, 'participants', p.id), p, { merge: true }).catch(() => {});
+      });
+      this.state.players.forEach((p) => {
+        setDoc(doc(db, 'players', p.id), p, { merge: true }).catch(() => {});
+      });
+    } catch {
+      // ignore
+    }
 
     this.saveState();
   }

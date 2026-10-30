@@ -3,8 +3,9 @@ import {
   Shield, CheckCircle, XCircle, Clock, Eye, Trophy, Users, AlertTriangle,
   RotateCcw, Save, ExternalLink, Search, Ban, Lock, LogOut, Check, Phone, ArrowLeft,
   MessageCircle, Send, Image as ImageIcon, Trash2, Plus, Sparkles, Upload, Edit2,
-  ShieldAlert, X, Gift, Copy
+  ShieldAlert, X, Gift, Copy, Download, FileSpreadsheet, QrCode, Share2
 } from 'lucide-react';
+import QRCode from 'qrcode';
 import { esportsStore } from '../services/store';
 import { WinReport, ReportStatus, AdminContactInfo, PlayerTeam, BannerPoster, BlacklistEntry, ParticipantUser, Season, EvidenceGuideConfig } from '../types/esports';
 import { compressImage } from '../utils/imageCompressor';
@@ -98,6 +99,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
   // Participant editing state
   const [editingParticipant, setEditingParticipant] = useState<ParticipantUser | null>(null);
   const [participantSearch, setParticipantSearch] = useState('');
+
+  // Share Tournament QR State (Admin Exclusive)
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [isGeneratingQr, setIsGeneratingQr] = useState(false);
 
   const isAdmin = esportsStore.isAdmin();
   const reports = esportsStore.getWinReports();
@@ -494,9 +501,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
   const handleResetSeason = () => {
     setConfirmModal({
       type: 'reset_season',
-      title: 'Reset Seluruh Poin Klasemen?',
-      message: 'PERINGATAN: Seluruh poin klasemen turnamen saat ini akan direset ke 0 untuk membuka putaran baru. Apakah Anda yakin?',
-      confirmLabel: 'Ya, Reset Poin Sekarang',
+      title: 'Reset Poin Turnamen Mingguan?',
+      message: 'PERINGATAN: Seluruh poin klasemen, total kemenangan, dan match peserta akan direset kembali ke 0. DAFTAR PESERTA DAN AKUN TIM TETAP TERSIMPAN AMAN (TIDAK AKAN DIHAPUS). Apakah Anda ingin melanjutkan?',
+      confirmLabel: 'Ya, Reset Poin ke 0',
     });
   };
 
@@ -522,6 +529,129 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
     });
     onNotify(`Data peserta "${editingParticipant.name}" berhasil diperbarui!`);
     setEditingParticipant(null);
+  };
+
+  const handleExportLeaderboardCSV = () => {
+    const allParticipants = esportsStore.getParticipants();
+    if (!allParticipants || allParticipants.length === 0) {
+      onNotify('Belum ada data peserta untuk diekspor ke CSV.');
+      return;
+    }
+
+    // Urutkan peringkat sesuai aturan: Poin tertinggi, Kemenangan terbanyak, Pertandingan tersedikit
+    const sorted = [...allParticipants].sort((a, b) => {
+      const ptsA = Number(a.points) || 0;
+      const ptsB = Number(b.points) || 0;
+      if (ptsB !== ptsA) return ptsB - ptsA;
+
+      const winsA = Number(a.wins) || 0;
+      const winsB = Number(b.wins) || 0;
+      if (winsB !== winsA) return winsB - winsA;
+
+      const matA = Number(a.matchesPlayed) || 0;
+      const matB = Number(b.matchesPlayed) || 0;
+      return matA - matB;
+    });
+
+    const now = new Date();
+    const dateFormatted = now.toISOString().slice(0, 10);
+    const timeFormatted = now.toTimeString().slice(0, 5).replace(':', '-');
+
+    const headers = [
+      'Peringkat',
+      'Nama Tim / Peserta',
+      'No WhatsApp',
+      'Poin Klasemen',
+      'Kemenangan (Wins)',
+      'Total Pertandingan (Matches)',
+      'Tanggal Terdaftar'
+    ];
+
+    const escapeCsv = (val: string | number | undefined | null) => {
+      if (val === undefined || val === null) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const csvRows = sorted.map((p, index) => {
+      const rank = index + 1;
+      const name = escapeCsv(p.name || 'Tim');
+      // Format telepon dengan ="..." agar angka 0 di depan tidak terpotong di Excel
+      const phone = p.phone ? `="${p.phone}"` : '""';
+      const points = Number(p.points) || 0;
+      const wins = Number(p.wins) || 0;
+      const matches = Number(p.matchesPlayed) || 0;
+      const registeredAt = escapeCsv(p.registeredAt || '-');
+
+      return [rank, name, phone, points, wins, matches, registeredAt].join(',');
+    });
+
+    // Gunakan UTF-8 BOM (\uFEFF) agar Microsoft Excel & spreadsheet lain membaca format teks secara sempurna
+    const csvContent = '\uFEFF' + [headers.join(','), ...csvRows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Klasemen_KLEPON_FT_${dateFormatted}_${timeFormatted}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    onNotify(`Berhasil mengunduh rekapan data klasemen (${sorted.length} tim) ke file CSV.`);
+  };
+
+  const getPlatformShareUrl = () => {
+    if (typeof window !== 'undefined' && window.location.origin) {
+      return window.location.origin;
+    }
+    return 'https://klepon-esports.com';
+  };
+
+  const generateQrCode = async () => {
+    setIsGeneratingQr(true);
+    try {
+      const shareUrl = getPlatformShareUrl();
+      const dataUrl = await QRCode.toDataURL(shareUrl, {
+        width: 360,
+        margin: 2,
+        color: {
+          dark: '#030712',
+          light: '#ffffff',
+        },
+      });
+      setQrDataUrl(dataUrl);
+    } catch (err) {
+      console.error('Failed to generate QR Code:', err);
+    } finally {
+      setIsGeneratingQr(false);
+    }
+  };
+
+  const handleOpenShareQr = () => {
+    generateQrCode();
+    setShowQrModal(true);
+  };
+
+  const handleCopyShareLink = () => {
+    const shareUrl = getPlatformShareUrl();
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        setCopiedLink(true);
+        setTimeout(() => setCopiedLink(false), 2200);
+      });
+    }
+  };
+
+  const handleDownloadQrImage = () => {
+    if (!qrDataUrl) return;
+    const link = document.createElement('a');
+    link.href = qrDataUrl;
+    link.download = `QR_KLEPON_WEEKLY_TURNAMENT.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    onNotify('Gambar QR Code turnamen berhasil diunduh ke galeri!');
   };
 
   const handleAddBlacklist = (e: React.FormEvent) => {
@@ -691,13 +821,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <button
+            type="button"
+            onClick={handleOpenShareQr}
+            className="px-3 py-2 bg-gradient-to-r from-blue-950 to-cyan-950 hover:from-blue-900 hover:to-cyan-900 border border-cyan-500/50 text-cyan-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-md group"
+            title="Generate & Bagikan Kode QR Resmi Turnamen untuk Disebarkan ke Pemain"
+          >
+            <QrCode className="w-3.5 h-3.5 text-cyan-400 group-hover:rotate-6 transition-transform" />
+            <span className="hidden sm:inline">QR Turnamen</span>
+            <span className="sm:hidden">QR</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleExportLeaderboardCSV}
+            className="px-3 py-2 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-md"
+            title="Ekspor Seluruh Klasemen Peserta & Poin ke File CSV (Format Excel)"
+          >
+            <Download className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Ekspor CSV</span>
+          </button>
           <button
             onClick={onBackToPortal}
             className="px-3.5 py-2 bg-[#0a1438] hover:bg-[#0f1f54] text-cyan-400 border border-cyan-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Ke Tampilan Website</span>
+            <span className="hidden sm:inline">Ke Tampilan Website</span>
+            <span className="sm:hidden">Website</span>
           </button>
           <button
             onClick={() => {
@@ -1102,15 +1252,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
                 </p>
               </div>
 
-              <div className="relative w-full sm:w-64">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                  type="text"
-                  placeholder="Cari peserta / no wa..."
-                  value={participantSearch}
-                  onChange={(e) => setParticipantSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 bg-[#030616] border border-blue-900/60 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono"
-                />
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <div className="relative flex-1 sm:w-60">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Cari peserta / no wa..."
+                    value={participantSearch}
+                    onChange={(e) => setParticipantSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 bg-[#030616] border border-blue-900/60 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleExportLeaderboardCSV}
+                  className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-md shrink-0 transition-all hover:scale-102"
+                  title="Unduh seluruh data klasemen peserta dan poin ke file CSV"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Ekspor CSV</span>
+                </button>
               </div>
             </div>
 
@@ -2086,6 +2247,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
               </div>
             </div>
 
+            {/* KODE QR RESMI TURNAMEN (DISTRIBUSI PEMAIN) */}
+            <div className="p-4 bg-[#030616] rounded-xl border border-cyan-500/40 space-y-3 shadow-lg">
+              <div className="flex items-center justify-between border-b border-blue-900/60 pb-2">
+                <div className="font-bold text-cyan-400 uppercase tracking-wider text-[11px] flex items-center gap-2">
+                  <QrCode className="w-4 h-4 text-cyan-400" />
+                  <span>Kode QR Resmi Platform Turnamen (Khusus Admin)</span>
+                </div>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded">
+                  Admin Exclusive
+                </span>
+              </div>
+              <p className="text-slate-400 text-xs leading-relaxed">
+                Gunakan kode QR resmi ini untuk dibagikan ke grup WhatsApp turnamen, poster promosi, atau status media sosial agar pemain dapat langsung mengakses halaman klasemen dan setor kemenangan.
+              </p>
+              <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={handleOpenShareQr}
+                  className="px-4 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-md"
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>Buka & Unduh Kode QR</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyShareLink}
+                  className="px-3.5 py-2 bg-[#070e28] hover:bg-[#0a153c] border border-cyan-500/30 text-cyan-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedLink ? 'Tersalin!' : 'Salin Tautan'}</span>
+                </button>
+              </div>
+            </div>
+
             <button
               type="submit"
               className="px-6 py-2.5 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg flex items-center gap-2 cursor-pointer shadow-lg shadow-cyan-500/20"
@@ -2160,23 +2355,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
             </form>
           </div>
 
-          {/* Reset Klasemen Tanpa Tulisan Week */}
-          <div className="bg-[#070f2c]/90 border border-rose-500/30 rounded-2xl p-6 shadow-xl">
-            <h3 className="text-base font-bold uppercase font-display text-white mb-2 flex items-center gap-2">
+          {/* Reset Klasemen: Hanya Reset Point, Daftar Peserta Tetap Aman */}
+          <div className="bg-[#070f2c]/90 border border-rose-500/30 rounded-2xl p-6 shadow-xl space-y-4">
+            <h3 className="text-base font-bold uppercase font-display text-white flex items-center gap-2">
               <RotateCcw className="w-5 h-5 text-rose-400" />
               <span>Reset Klasemen Poin Mingguan</span>
             </h3>
-            <p className="text-xs text-slate-300 mb-5 leading-relaxed">
-              Mereset seluruh poin peserta ke <strong>0 Poin</strong> untuk memulai babak turnamen baru.
-              Reset dilakukan bersih <strong>tanpa label Week 1 atau Week 2</strong>.
-            </p>
+            
+            <div className="p-3.5 bg-blue-950/50 border border-cyan-500/40 rounded-xl text-xs space-y-1.5">
+              <div className="font-bold text-cyan-300 flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 text-cyan-400" />
+                <span>DAFTAR PESERTA TETAP TERSIMPAN AMAN (TIDAK AKAN DIHAPUS)</span>
+              </div>
+              <p className="text-slate-300 leading-relaxed text-[11px]">
+                Seluruh akun tim yang terdaftar, nomor WhatsApp, nama kapten, dan profil <strong>TETAP ADA DAN TIDAK DIHAPUS</strong>.
+                Sistem hanya mereset <strong>Poin Klasemen, Kemenangan, dan Total Match menjadi 0</strong> untuk memulai putaran kualifikasi mingguan baru.
+              </p>
+            </div>
+
+            {/* Rekomendasi Ekspor CSV untuk Backup */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-emerald-950/30 border border-emerald-500/40 rounded-xl text-xs">
+              <div className="space-y-1">
+                <div className="font-bold text-emerald-300 flex items-center gap-1.5">
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                  <span>Cadangkan / Ekspor Data Klasemen ke CSV</span>
+                </div>
+                <p className="text-slate-400 text-[11px] leading-relaxed">
+                  Unduh rekapan poin, peringkat, kemenangan, dan kontak seluruh peserta sebelum atau sesudah reset untuk arsip panitia.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleExportLeaderboardCSV}
+                className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 text-slate-950 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-md shrink-0 transition-all hover:scale-102"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Unduh File CSV</span>
+              </button>
+            </div>
 
             <button
               onClick={handleResetSeason}
               className="px-5 py-2.5 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 text-white font-bold rounded-lg text-xs flex items-center gap-2 cursor-pointer shadow-lg shadow-rose-600/20"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>Reset Klasemen Poin Turnamen (Poin Kembali ke 0)</span>
+              <span>Reset Poin Klasemen ke 0 (Pertahankan Semua Peserta)</span>
             </button>
           </div>
         </div>
@@ -2617,6 +2840,122 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Kode QR Resmi Turnamen (Admin Exclusive) */}
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
+          <div className="bg-[#070f2c] border border-cyan-500/50 rounded-2xl w-full max-w-md shadow-2xl p-6 text-center space-y-5 relative">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-blue-900/60">
+              <div className="flex items-center gap-2 text-left">
+                <div className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/40">
+                  <QrCode className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold uppercase font-display text-white">
+                    Kode QR Resmi Turnamen
+                  </h3>
+                  <p className="text-[11px] font-mono text-cyan-400">
+                    Khusus Panel Admin · KLEPON FT
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQrModal(false)}
+                className="w-8 h-8 rounded-lg bg-[#030616] hover:bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer transition-colors border border-blue-900"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* QR Code Container */}
+            <div className="bg-gradient-to-b from-[#030718] to-[#040b22] border-2 border-cyan-500/40 p-5 rounded-2xl shadow-xl space-y-3">
+              <div className="bg-white p-3.5 rounded-xl inline-block shadow-2xl mx-auto border-4 border-cyan-400/30">
+                {qrDataUrl ? (
+                  <img
+                    src={qrDataUrl}
+                    alt="Kode QR Turnamen"
+                    className="w-56 h-56 mx-auto object-contain block rounded"
+                  />
+                ) : (
+                  <div className="w-56 h-56 flex items-center justify-center text-slate-800 font-mono text-xs">
+                    {isGeneratingQr ? 'Membuat QR Code...' : 'QR Code siap'}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <div className="font-bold text-white text-xs font-display uppercase tracking-wide">
+                  Scan untuk Langsung Menuju Website Turnamen
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed max-w-xs mx-auto">
+                  Arahkan kamera HP / Google Lens / WhatsApp untuk membuka portal klasemen, storan kemenangan, dan jadwal pertandingan.
+                </p>
+              </div>
+            </div>
+
+            {/* URL Copy Box */}
+            <div className="space-y-1.5 text-left">
+              <label className="block text-[11px] font-mono text-slate-400 font-semibold">
+                Tautan Resmi Platform:
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={getPlatformShareUrl()}
+                  className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none select-all"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyShareLink}
+                  className="px-3.5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-md shrink-0 transition-transform active:scale-95"
+                >
+                  {copiedLink ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-slate-950" />
+                      <span>Tersalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-slate-950" />
+                      <span>Salin</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Action Buttons: Download QR & WhatsApp Share */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={handleDownloadQrImage}
+                disabled={!qrDataUrl}
+                className="w-full px-4 py-2.5 bg-[#0a1438] hover:bg-[#0f1f54] text-cyan-300 border border-cyan-500/40 rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md disabled:opacity-50"
+              >
+                <Download className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Unduh Gambar QR</span>
+              </button>
+
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(
+                  `🔥 *KLEPON WEEKLY TURNAMENT FREE - FREE FIRE CLASH SQUAD*\n\n` +
+                  `Ayo gabung turnamen mingguan 100% GRATIS! Kumpulkan poin kemenangan FT dan rebut total hadiah ${season.totalPrizePool}.\n\n` +
+                  `📲 Scan QR atau kunjungi link berikut untuk cek klasemen & setor kemenangan:\n${getPlatformShareUrl()}`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 text-slate-950 rounded-xl text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md"
+              >
+                <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                <span>Bagikan ke WhatsApp</span>
+              </a>
+            </div>
           </div>
         </div>
       )}

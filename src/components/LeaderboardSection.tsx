@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Flame, ShieldAlert, CheckCircle2, Users, AlertCircle, Clock } from 'lucide-react';
+import { Search, Flame, ShieldAlert, CheckCircle2, Users, AlertCircle, Clock, Zap } from 'lucide-react';
 import { esportsStore } from '../services/store';
 
 export const LeaderboardSection: React.FC = () => {
@@ -84,6 +84,12 @@ export const LeaderboardSection: React.FC = () => {
                   <th className="py-3.5 px-4">Tim & Kapten</th>
                   <th className="py-3.5 px-4 font-mono text-center">Total Match</th>
                   <th className="py-3.5 px-4 font-mono text-center">Menang FT</th>
+                  <th className="py-3.5 px-4 font-mono text-center">
+                    <span className="inline-flex items-center gap-1 justify-center" title="Kemenangan Beruntun (Win Streak)">
+                      <Flame className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Current Streak</span>
+                    </span>
+                  </th>
                   <th className="py-3.5 px-4 font-mono text-right">Poin</th>
                   <th className="py-3.5 px-4 text-center">Status Kualifikasi</th>
                 </tr>
@@ -91,7 +97,7 @@ export const LeaderboardSection: React.FC = () => {
               <tbody className="divide-y divide-blue-950/60 text-xs">
                 {filteredPlayers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-500 font-mono">
+                    <td colSpan={7} className="py-12 text-center text-slate-500 font-mono">
                       {searchQuery
                         ? `Tidak ada tim yang cocok dengan pencarian "${searchQuery}".`
                         : 'Belum ada tim peserta yang terdaftar atau klasemen kualifikasi masih kosong.'}
@@ -102,6 +108,7 @@ export const LeaderboardSection: React.FC = () => {
                     const rank = index + 1;
                     const isTop10 = rank <= 10;
                     const isCutoffLine = rank === 10;
+                    const streakCount = Number(player.streak) || 0;
 
                     return (
                       <React.Fragment key={player.id}>
@@ -171,6 +178,31 @@ export const LeaderboardSection: React.FC = () => {
                             {player.wins}
                           </td>
 
+                          {/* Current Streak Column with Competitive Highlights */}
+                          <td className="py-3.5 px-4 text-center">
+                            {streakCount >= 5 ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-amber-500/20 border border-amber-400/80 text-amber-300 font-mono font-black text-[11px] rounded-full shadow-lg shadow-amber-500/20 animate-pulse">
+                                <Flame className="w-3.5 h-3.5 text-amber-400 fill-current animate-bounce shrink-0" />
+                                <span>{streakCount} W-STREAK</span>
+                                <span className="bg-gradient-to-r from-amber-400 to-rose-400 text-slate-950 px-1 py-0.2 rounded text-[9px] font-black uppercase tracking-wider shrink-0">
+                                  ON FIRE
+                                </span>
+                              </span>
+                            ) : streakCount >= 3 ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-cyan-950/80 border border-cyan-400/60 text-cyan-300 font-mono font-bold text-[11px] rounded-full shadow-sm">
+                                <Flame className="w-3 h-3 text-cyan-400 fill-current shrink-0" />
+                                <span>{streakCount} W-Streak</span>
+                              </span>
+                            ) : streakCount >= 1 ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-950/60 border border-blue-700/40 text-blue-300 font-mono text-[10px] rounded-md">
+                                <Zap className="w-2.5 h-2.5 text-blue-400 shrink-0" />
+                                <span>{streakCount} Win</span>
+                              </span>
+                            ) : (
+                              <span className="font-mono text-slate-600 text-[11px]">-</span>
+                            )}
+                          </td>
+
                           {/* Poin Kualifikasi */}
                           <td className="py-3.5 px-4 text-right font-mono font-black text-sm text-cyan-400">
                             {player.points} Pts
@@ -194,7 +226,7 @@ export const LeaderboardSection: React.FC = () => {
                         {/* Cutoff separator line after rank 10 */}
                         {isCutoffLine && (
                           <tr className="bg-gradient-to-r from-cyan-950/80 via-blue-900/60 to-cyan-950/80 border-y-2 border-cyan-400/50">
-                            <td colSpan={6} className="py-2 px-4 text-center font-mono text-[11px] font-black text-cyan-300 tracking-wider">
+                            <td colSpan={7} className="py-2 px-4 text-center font-mono text-[11px] font-black text-cyan-300 tracking-wider">
                               ▲ BATAS KUALIFIKASI: TOP 10 BESAR MASUK BAGAN MINGGUAN ▲
                             </td>
                           </tr>

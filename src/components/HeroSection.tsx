@@ -1,5 +1,8 @@
 import React from 'react';
-import { MessageCircle, Phone, Trophy, UserPlus, Gift, Radio, HelpCircle, Sparkles, Swords } from 'lucide-react';
+import {
+  MessageCircle, Phone, Trophy, UserPlus, Gift, Radio, HelpCircle,
+  Sparkles, Swords
+} from 'lucide-react';
 import { esportsStore } from '../services/store';
 
 interface HeroSectionProps {
