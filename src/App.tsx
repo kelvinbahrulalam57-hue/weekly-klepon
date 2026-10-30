@@ -18,10 +18,12 @@ import { UserSubmissionHistoryModal } from './components/UserSubmissionHistoryMo
 import { FloatingWhatsAppBar } from './components/FloatingWhatsAppBar';
 import { Footer } from './components/Footer';
 import { StealthAdminAuthModal } from './components/StealthAdminAuthModal';
+import { IntroSplashAnimation } from './components/IntroSplashAnimation';
 import { esportsStore } from './services/store';
 import { CheckCircle2 } from 'lucide-react';
 
 export default function App() {
+  const [showIntro, setShowIntro] = useState(true);
   const [currentView, setCurrentView] = useState<'portal' | 'admin'>('portal');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -70,7 +72,14 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#040817] text-slate-100 flex flex-col selection:bg-cyan-500 selection:text-slate-950 font-sans bg-cyber-grid">
+    <div className="min-h-screen bg-[#040817] text-slate-100 flex flex-col selection:bg-cyan-500 selection:text-slate-950 font-sans bg-cyber-grid relative">
+      {/* Cinematic Esports Intro Animation saat Masuk Website */}
+      {showIntro && (
+        <IntroSplashAnimation
+          onComplete={() => setShowIntro(false)}
+        />
+      )}
+
       {/* Toast Notification Banner */}
       {toastMessage && (
         <div className="fixed top-18 right-4 z-50 max-w-md bg-[#070f2c] border border-cyan-500/50 text-white px-4 py-3 rounded-xl shadow-2xl flex items-start gap-3 backdrop-blur-md animate-fade-in">
@@ -89,6 +98,7 @@ export default function App() {
         onOpenReportModal={() => setIsReportModalOpen(true)}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
         onOpenHistoryModal={() => setIsHistoryModalOpen(true)}
+        onReplayIntro={() => setShowIntro(true)}
       />
 
       {/* Main Viewport Content */}
@@ -98,6 +108,7 @@ export default function App() {
             <HeroSection
               onOpenReportModal={() => setIsReportModalOpen(true)}
               onOpenAuthModal={() => setIsAuthModalOpen(true)}
+              onReplayIntro={() => setShowIntro(true)}
             />
             {/* Galeri Poster Turnamen */}
             <BannerGallerySection
@@ -122,6 +133,7 @@ export default function App() {
       <MainPosterModal
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onOpenReportModal={() => setIsReportModalOpen(true)}
+        isIntroActive={showIntro}
       />
 
       {/* Modal Setoran Kemenangan FT (Foto Stiker DONE di GB) */}

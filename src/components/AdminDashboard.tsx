@@ -59,12 +59,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
 
   // In-app Confirmation Modal state (replacing window.confirm for iframe sandbox safety)
   const [confirmModal, setConfirmModal] = useState<{
-    type: 'reset_season' | 'delete_participant' | 'delete_banner' | 'delete_blacklist';
+    type: 'reset_season' | 'delete_participant' | 'delete_banner' | 'delete_blacklist' | 'delete_report';
     title: string;
     message: string;
     confirmLabel?: string;
     payload?: any;
   } | null>(null);
+
+  // Logo management state
+  const [customLogoInput, setCustomLogoInput] = useState(esportsStore.getCustomLogo());
+  const [isLogoUploading, setIsLogoUploading] = useState(false);
+
+  // Win Report Edit & Add manual state
+  const [editingReport, setEditingReport] = useState<WinReport | null>(null);
+  const [showAddReportModal, setShowAddReportModal] = useState(false);
+  const [reportFormData, setReportFormData] = useState({
+    teamName: '',
+    phone: '',
+    captainName: '',
+    potName: 'Fast Tournament Clash Squad',
+    storanDate: new Date().toISOString().slice(0, 16).replace('T', ' '),
+    screenshotUrl: '',
+    status: 'DONE' as ReportStatus,
+    adminNotes: '',
+  });
+  const [isReportScreenshotUploading, setIsReportScreenshotUploading] = useState(false);
 
   // Blacklist management state
   const [showAddBlForm, setShowAddBlForm] = useState(false);
@@ -164,6 +183,142 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
     setShowRejectDialog(false);
     setRejectReason('');
   };
+
+  // Win Report Edit, Delete, and Manual Add Handlers
+  const handleStartEditReport = (report: WinReport) => {
+    setEditingReport(report);
+    setReportFormData({
+      teamName: report.teamName,
+      phone: report.phone,
+      captainName: report.captainName || report.teamName,
+      potName: report.potName || 'Fast Tournament Clash Squad',
+      storanDate: report.storanDate || new Date().toISOString().slice(0, 16).replace('T', ' '),
+      screenshotUrl: report.screenshotUrl,
+      status: report.status,
+      adminNotes: report.adminNotes || '',
+    });
+  };
+
+  const handleSaveEditReport = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingReport) return;
+    if (!reportFormData.teamName.trim() || !reportFormData.phone.trim()) {
+      onNotify('Nama tim dan nomor WhatsApp wajib diisi!');
+      return;
+    }
+
+    esportsStore.updateWinReport(editingReport.id, {
+      teamName: reportFormData.teamName.trim(),
+      phone: reportFormData.phone.trim(),
+      captainName: reportFormData.captainName.trim() || reportFormData.teamName.trim(),
+      potName: reportFormData.potName.trim(),
+      storanDate: reportFormData.storanDate,
+      screenshotUrl: reportFormData.screenshotUrl || editingReport.screenshotUrl,
+      status: reportFormData.status,
+      adminNotes: reportFormData.adminNotes.trim(),
+    });
+
+    onNotify(`Laporan "${reportFormData.teamName}" berhasil diperbarui!`);
+    setEditingReport(null);
+    if (selectedReport?.id === editingReport.id) {
+      setSelectedReport(null);
+    }
+  };
+
+  const handleDeleteReportClick = (report: WinReport) => {
+    setConfirmModal({
+      type: 'delete_report',
+      title: 'Hapus Laporan / Storan?',
+      message: `Apakah Anda yakin ingin menghapus laporan "${report.teamName}" (${report.phone})? ${
+        report.status === 'DONE'
+          ? 'Perhatian: Status laporan ini adalah Sah (+1 Poin). Menghapusnya akan otomatis menarik kembali 1 poin yang telah diberikan.'
+          : 'Laporan ini akan dihapus permanen dari sistem.'
+      }`,
+      confirmLabel: 'Ya, Hapus Laporan',
+      payload: report,
+    });
+  };
+
+  const handleOpenAddReportModal = () => {
+    setReportFormData({
+      teamName: '',
+      phone: '',
+      captainName: '',
+      potName: 'Fast Tournament Clash Squad',
+      storanDate: new Date().toISOString().slice(0, 16).replace('T', ' '),
+      screenshotUrl: '',
+      status: 'DONE',
+      adminNotes: 'Ditambahkan manual oleh Panitia KLEPON FT',
+    });
+    setShowAddReportModal(true);
+  };
+
+  const handleSaveManualReport = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportFormData.teamName.trim() || !reportFormData.phone.trim()) {
+      onNotify('Nama tim dan nomor WhatsApp wajib diisi!');
+      return;
+    }
+
+    esportsStore.addManualWinReport({
+      teamName: reportFormData.teamName.trim(),
+      phone: reportFormData.phone.trim(),
+      captainName: reportFormData.captainName.trim() || reportFormData.teamName.trim(),
+      potName: reportFormData.potName.trim(),
+      storanDate: reportFormData.storanDate,
+      screenshotUrl: reportFormData.screenshotUrl,
+      status: reportFormData.status,
+      adminNotes: reportFormData.adminNotes.trim(),
+    });
+
+    onNotify(`Laporan kemenangan baru untuk "${reportFormData.teamName}" berhasil ditambahkan!`);
+    setShowAddReportModal(false);
+  };
+
+  const handleReportScreenshotUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsReportScreenshotUploading(true);
+      try {
+        const compressed = await compressImage(file, 960, 960, 0.8);
+        setReportFormData((prev) => ({ ...prev, screenshotUrl: compressed }));
+        onNotify('Foto screenshot bukti berhasil dimuat.');
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsReportScreenshotUploading(false);
+      }
+    }
+  };
+
+  // Logo management handlers
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsLogoUploading(true);
+      try {
+        const compressed = await compressImage(file, 400, 400, 0.85);
+        setCustomLogoInput(compressed);
+        onNotify('Foto logo dari galeri berhasil dimuat. Klik "Simpan Logo Baru" untuk menerapkan.');
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLogoUploading(false);
+      }
+    }
+  };
+
+  const handleSaveCustomLogo = () => {
+    esportsStore.updateCustomLogo(customLogoInput);
+    onNotify('Logo pojok kiri atas berhasil diperbarui dan langsung aktif di seluruh website!');
+  };
+
+  const handleResetDefaultLogo = () => {
+    setCustomLogoInput('');
+    esportsStore.updateCustomLogo('');
+    onNotify('Logo berhasil dikembalikan ke logo huruf "K" default.');
+  };
+
 
   const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -440,6 +595,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
       const entry = confirmModal.payload as BlacklistEntry;
       esportsStore.deleteBlacklistEntry(entry.id);
       onNotify(`Sanksi untuk "${entry.teamName}" berhasil dicabut.`);
+    } else if (confirmModal.type === 'delete_report') {
+      const rep = confirmModal.payload as WinReport;
+      esportsStore.deleteWinReport(rep.id, true);
+      onNotify(`Laporan storan untuk "${rep.teamName}" berhasil dihapus.`);
+      if (selectedReport?.id === rep.id) {
+        setSelectedReport(null);
+      }
     }
 
     setConfirmModal(null);
@@ -637,8 +799,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
               : 'bg-[#070e28] text-slate-300 hover:bg-[#0a153c] border border-blue-900/50'
           }`}
         >
-          <MessageCircle className="w-4 h-4" />
-          <span>Sosmed & Kontak</span>
+          <Sparkles className="w-4 h-4" />
+          <span>Logo & Kontak</span>
         </button>
 
         <button
@@ -658,7 +820,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
       {activeTab === 'queue' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {(['PENDING', 'DONE', 'REJECTED', 'ALL'] as const).map((st) => (
                 <button
                   key={st}
@@ -672,6 +834,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
                   {st === 'PENDING' ? `Under Review (${pendingCount})` : st === 'DONE' ? `Verified (${doneCount})` : st === 'REJECTED' ? `Rejected (${rejectedCount})` : `Semua (${totalReports})`}
                 </button>
               ))}
+
+              <button
+                type="button"
+                onClick={handleOpenAddReportModal}
+                className="px-3 py-1.5 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer shadow-md flex items-center gap-1.5"
+                title="Tambah Storan / Laporan Manual"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Tambah Storan Manual</span>
+              </button>
             </div>
 
             <div className="relative w-full sm:w-64">
@@ -754,10 +926,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
                           )}
                         </td>
                         <td className="py-3.5 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
                             {report.status === 'PENDING' && (
                               <>
                                 <button
+                                  type="button"
                                   onClick={() => handleApproveReport(report)}
                                   className="px-2.5 py-1 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold rounded text-xs flex items-center gap-1 cursor-pointer shadow-md"
                                   title="Sahkan Bukti & Tambahkan +1 Poin"
@@ -766,6 +939,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
                                   <span>Sah</span>
                                 </button>
                                 <button
+                                  type="button"
                                   onClick={() => {
                                     setSelectedReport(report);
                                     setShowRejectDialog(true);
@@ -778,14 +952,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
                                 </button>
                               </>
                             )}
-                            {report.status !== 'PENDING' && (
+                            {report.status === 'DONE' && (
                               <button
-                                onClick={() => setSelectedReport(report)}
-                                className="px-2.5 py-1 bg-[#070e28] hover:bg-[#0a153c] border border-blue-900 text-slate-300 rounded text-xs cursor-pointer"
+                                type="button"
+                                onClick={() => {
+                                  setSelectedReport(report);
+                                  setShowRejectDialog(true);
+                                }}
+                                className="px-2 py-1 bg-rose-950/70 hover:bg-rose-900 border border-rose-500/40 text-rose-300 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                                title="Ubah status ke Ditolak (Tarik kembali +1 Poin)"
                               >
-                                Detail
+                                <X className="w-3 h-3" />
+                                <span>Tolak</span>
                               </button>
                             )}
+                            {report.status === 'REJECTED' && (
+                              <button
+                                type="button"
+                                onClick={() => handleApproveReport(report)}
+                                className="px-2 py-1 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-400/50 text-cyan-300 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                                title="Ubah status ke Sah (Berikan +1 Poin)"
+                              >
+                                <Check className="w-3 h-3" />
+                                <span>Sahkan</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditReport(report)}
+                              className="p-1.5 bg-[#070e28] hover:bg-blue-900/60 border border-blue-900 text-cyan-300 hover:text-white rounded text-xs cursor-pointer transition-colors"
+                              title="Edit Data Storan"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteReportClick(report)}
+                              className="p-1.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/60 text-rose-400 hover:text-rose-200 rounded text-xs cursor-pointer transition-colors"
+                              title="Hapus Storan Ini dari Antrean"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1674,6 +1881,127 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
           </div>
 
           <form onSubmit={handleSaveContacts} className="space-y-5 text-xs">
+            {/* PENGATURAN LOGO WEBSITE (POJOK KIRI ATAS) */}
+            <div className="p-4 bg-[#030616] rounded-xl border border-cyan-500/40 space-y-4 shadow-lg">
+              <div className="flex items-center justify-between border-b border-blue-900/60 pb-2">
+                <div className="font-bold text-cyan-400 uppercase tracking-wider text-[11px] flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                  <span>Pengaturan Logo Website (Pojok Kiri Atas)</span>
+                </div>
+                <span className="text-[10px] font-mono text-slate-400">Ganti Huruf "K" dengan Foto</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                {/* Live Logo Preview */}
+                <div className="md:col-span-4 bg-[#070e28] p-3 rounded-lg border border-blue-900/80 text-center flex flex-col items-center justify-center">
+                  <div className="text-[10px] font-mono text-slate-400 mb-2">Tampilan Logo Saat Ini:</div>
+                  <div className="p-2 bg-[#04081c] rounded-xl border border-blue-800/80 inline-flex items-center gap-2 shadow-inner">
+                    {customLogoInput ? (
+                      <img
+                        src={customLogoInput}
+                        alt="Logo Preview"
+                        className="w-12 h-12 rounded-lg object-cover border border-cyan-400 shadow-lg shadow-cyan-500/20"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-cyan-400 via-blue-600 to-indigo-700 flex items-center justify-center font-black text-slate-950 font-display text-xl border border-cyan-400/40">
+                        K
+                      </div>
+                    )}
+                    <div className="text-left">
+                      <span className="text-xs font-black text-white block">KLEPON</span>
+                      <span className="text-[9px] font-mono text-cyan-400">WEEKLY FREE</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono text-slate-400 mt-2">
+                    {customLogoInput ? '✓ Menggunakan Foto Custom' : 'Default: Huruf "K" Gradien'}
+                  </span>
+                </div>
+
+                {/* Upload & Select from Gallery Controls */}
+                <div className="md:col-span-8 space-y-3">
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Unggah Foto Logo Baru dari Galeri HP / PC:
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="flex-1 cursor-pointer">
+                        <div className="px-3 py-2 bg-[#070e28] hover:bg-[#0a153c] border border-dashed border-cyan-500/50 hover:border-cyan-400 rounded-lg text-slate-300 flex items-center justify-center gap-2 text-xs transition-colors">
+                          <Upload className="w-4 h-4 text-cyan-400" />
+                          <span>{isLogoUploading ? 'Mengompres Foto...' : 'Pilih Foto dari Galeri...'}</span>
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          disabled={isLogoUploading}
+                          className="hidden"
+                        />
+                      </label>
+                      {customLogoInput && (
+                        <button
+                          type="button"
+                          onClick={handleResetDefaultLogo}
+                          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-mono transition-colors cursor-pointer"
+                          title="Reset ke Logo Huruf K Default"
+                        >
+                          Reset ke K
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quick Select from Tournament Banners */}
+                  {banners.length > 0 && (
+                    <div>
+                      <label className="block text-slate-400 text-[10px] font-mono uppercase mb-1">
+                        Atau Pilih dari Galeri Poster Turnamen:
+                      </label>
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                        {banners.slice(0, 5).map((b) => (
+                          <img
+                            key={b.id}
+                            src={b.imageUrl}
+                            alt={b.title}
+                            onClick={() => {
+                              setCustomLogoInput(b.imageUrl);
+                              onNotify(`Memilih poster "${b.title}" sebagai logo.`);
+                            }}
+                            className="w-10 h-10 rounded-md object-cover border border-blue-800 hover:border-cyan-400 cursor-pointer shrink-0 transition-all hover:scale-105"
+                            title={`Gunakan poster "${b.title}" sebagai logo`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Direct Logo URL */}
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Atau Masukkan URL Gambar Logo:
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://.../logo.png"
+                      value={customLogoInput}
+                      onChange={(e) => setCustomLogoInput(e.target.value)}
+                      className="w-full bg-[#070e28] border border-blue-900 rounded-lg px-3 py-1.5 text-white font-mono text-xs focus:outline-none focus:border-cyan-400"
+                    />
+                  </div>
+
+                  <div className="pt-1 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveCustomLogo}
+                      className="px-4 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg text-xs cursor-pointer shadow-md flex items-center gap-1.5"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Terapkan Logo Sekarang</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="p-4 bg-[#030616] rounded-xl border border-blue-900/60 space-y-3">
               <div className="font-bold text-cyan-400 uppercase tracking-wider text-[11px]">
                 Pengaturan Akun TikTok
@@ -1888,22 +2216,73 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
               </div>
             </div>
 
-            {selectedReport.status === 'PENDING' && (
-              <div className="flex items-center justify-end gap-3 pt-2">
+            {/* Action Bar for Inspeksi Report */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-blue-900 mt-2">
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowRejectDialog(true)}
-                  className="px-4 py-2 bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-500/40 font-bold rounded-lg"
+                  type="button"
+                  onClick={() => {
+                    handleStartEditReport(selectedReport);
+                    setSelectedReport(null);
+                  }}
+                  className="px-3 py-1.5 bg-[#070e28] hover:bg-blue-900/60 border border-blue-800 text-cyan-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
                 >
-                  Tolak Storan
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Edit Data Storan</span>
                 </button>
                 <button
-                  onClick={() => handleApproveReport(selectedReport)}
-                  className="px-5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg shadow-lg"
+                  type="button"
+                  onClick={() => {
+                    handleDeleteReportClick(selectedReport);
+                  }}
+                  className="px-3 py-1.5 bg-rose-950/50 hover:bg-rose-900/70 border border-rose-900/60 text-rose-400 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
                 >
-                  Sahkan & Tambah +1 Poin
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus Laporan</span>
                 </button>
               </div>
-            )}
+
+              <div className="flex items-center gap-2">
+                {selectedReport.status === 'PENDING' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setShowRejectDialog(true)}
+                      className="px-4 py-1.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-500/40 font-bold rounded-lg cursor-pointer"
+                    >
+                      Tolak Storan
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApproveReport(selectedReport)}
+                      className="px-4 py-1.5 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg shadow-lg cursor-pointer"
+                    >
+                      Sahkan (+1 Poin)
+                    </button>
+                  </>
+                )}
+
+                {selectedReport.status === 'DONE' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowRejectDialog(true)}
+                    className="px-4 py-1.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-500/40 font-bold rounded-lg cursor-pointer"
+                  >
+                    Ubah ke Ditolak (Tarik Poin)
+                  </button>
+                )}
+
+                {selectedReport.status === 'REJECTED' && (
+                  <button
+                    type="button"
+                    onClick={() => handleApproveReport(selectedReport)}
+                    className="px-4 py-1.5 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold rounded-lg cursor-pointer shadow"
+                  >
+                    Sahkan & Berikan +1 Poin
+                  </button>
+                )}
+              </div>
+            </div>
 
             {showRejectDialog && (
               <form onSubmit={handleRejectReport} className="mt-4 p-4 bg-[#030616] rounded-xl border border-rose-500/40 space-y-3">
@@ -1920,19 +2299,324 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
                   <button
                     type="button"
                     onClick={() => setShowRejectDialog(false)}
-                    className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded"
+                    className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded cursor-pointer"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-rose-600 text-white font-bold rounded"
+                    className="px-4 py-1.5 bg-rose-600 text-white font-bold rounded cursor-pointer shadow"
                   >
                     Konfirmasi Tolak
                   </button>
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Edit Data Storan Kemenangan */}
+      {editingReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+          <div className="bg-[#070f2c] border border-cyan-500/50 rounded-2xl w-full max-w-lg shadow-2xl p-5 sm:p-6 text-xs space-y-4 animate-fade-in">
+            <div className="flex items-center justify-between pb-3 border-b border-blue-900">
+              <h3 className="text-base font-bold font-display uppercase text-white flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-cyan-400" />
+                <span>Edit Laporan Storan Kemenangan</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingReport(null)}
+                className="px-2.5 py-1 bg-slate-800 text-slate-300 rounded cursor-pointer hover:bg-slate-700"
+              >
+                ✕ Tutup
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditReport} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Nama Tim *</label>
+                  <input
+                    type="text"
+                    required
+                    value={reportFormData.teamName}
+                    onChange={(e) => setReportFormData({ ...reportFormData, teamName: e.target.value })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">No WhatsApp *</label>
+                  <input
+                    type="text"
+                    required
+                    value={reportFormData.phone}
+                    onChange={(e) => setReportFormData({ ...reportFormData, phone: e.target.value })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Nama Kapten</label>
+                  <input
+                    type="text"
+                    value={reportFormData.captainName}
+                    onChange={(e) => setReportFormData({ ...reportFormData, captainName: e.target.value })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Sesi Match Pot</label>
+                  <input
+                    type="text"
+                    value={reportFormData.potName}
+                    onChange={(e) => setReportFormData({ ...reportFormData, potName: e.target.value })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Waktu / Tanggal Setor</label>
+                  <input
+                    type="text"
+                    value={reportFormData.storanDate}
+                    onChange={(e) => setReportFormData({ ...reportFormData, storanDate: e.target.value })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Status Verifikasi *</label>
+                  <select
+                    value={reportFormData.status}
+                    onChange={(e) => setReportFormData({ ...reportFormData, status: e.target.value as ReportStatus })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  >
+                    <option value="DONE">DONE / Sah (+1 Poin Masuk)</option>
+                    <option value="REJECTED">REJECTED / Ditolak (0 Poin)</option>
+                    <option value="PENDING">PENDING / Under Review</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Catatan Admin / Alasan Penolakan</label>
+                <textarea
+                  rows={2}
+                  value={reportFormData.adminNotes}
+                  onChange={(e) => setReportFormData({ ...reportFormData, adminNotes: e.target.value })}
+                  placeholder="Catatan hasil verifikasi screenshot..."
+                  className="w-full bg-[#030616] border border-blue-900 rounded-lg p-2 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Foto Screenshot Bukti (Opsional Ganti)</label>
+                <div className="flex items-center gap-3">
+                  {reportFormData.screenshotUrl && (
+                    <img
+                      src={reportFormData.screenshotUrl}
+                      alt="Preview"
+                      className="w-12 h-12 object-cover rounded-lg border border-blue-900 shrink-0"
+                    />
+                  )}
+                  <label className="flex-1 cursor-pointer">
+                    <div className="px-3 py-2 bg-[#030616] hover:bg-[#070e28] border border-dashed border-blue-700 rounded-lg text-slate-300 flex items-center justify-center gap-2 text-xs">
+                      <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>{isReportScreenshotUploading ? 'Mengompres...' : 'Ganti Foto dari Galeri...'}</span>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleReportScreenshotUpload}
+                      disabled={isReportScreenshotUploading}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-blue-900">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDeleteReportClick(editingReport);
+                    setEditingReport(null);
+                  }}
+                  className="px-3 py-2 bg-rose-950/60 hover:bg-rose-900/80 border border-rose-500/40 text-rose-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus Laporan</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingReport(null)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg text-xs cursor-pointer shadow-lg"
+                  >
+                    Simpan Perubahan
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tambah Laporan / Storan Manual */}
+      {showAddReportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+          <div className="bg-[#070f2c] border border-cyan-500/50 rounded-2xl w-full max-w-lg shadow-2xl p-5 sm:p-6 text-xs space-y-4 animate-fade-in">
+            <div className="flex items-center justify-between pb-3 border-b border-blue-900">
+              <h3 className="text-base font-bold font-display uppercase text-white flex items-center gap-2">
+                <Plus className="w-4 h-4 text-cyan-400" />
+                <span>Tambah Laporan Storan Manual</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddReportModal(false)}
+                className="px-2.5 py-1 bg-slate-800 text-slate-300 rounded cursor-pointer hover:bg-slate-700"
+              >
+                ✕ Tutup
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveManualReport} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Nama Tim *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: SQUAD DRAGONS"
+                    value={reportFormData.teamName}
+                    onChange={(e) => setReportFormData({ ...reportFormData, teamName: e.target.value })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">No WhatsApp *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="08xxxxxxxxxx"
+                    value={reportFormData.phone}
+                    onChange={(e) => setReportFormData({ ...reportFormData, phone: e.target.value })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Nama Kapten (Opsional)</label>
+                  <input
+                    type="text"
+                    placeholder="Nama Kapten"
+                    value={reportFormData.captainName}
+                    onChange={(e) => setReportFormData({ ...reportFormData, captainName: e.target.value })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Sesi Match Pot</label>
+                  <input
+                    type="text"
+                    value={reportFormData.potName}
+                    onChange={(e) => setReportFormData({ ...reportFormData, potName: e.target.value })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Waktu / Tanggal Setor</label>
+                  <input
+                    type="text"
+                    value={reportFormData.storanDate}
+                    onChange={(e) => setReportFormData({ ...reportFormData, storanDate: e.target.value })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Status Laporan *</label>
+                  <select
+                    value={reportFormData.status}
+                    onChange={(e) => setReportFormData({ ...reportFormData, status: e.target.value as ReportStatus })}
+                    className="w-full bg-[#030616] border border-blue-900 rounded-lg px-3 py-2 text-white font-mono"
+                  >
+                    <option value="DONE">DONE / Sah Langsung (+1 Poin Ditambahkan)</option>
+                    <option value="REJECTED">REJECTED / Ditolak (Catat Bukti Palsu)</option>
+                    <option value="PENDING">PENDING / Under Review</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Unggah Screenshot Bukti dari Galeri</label>
+                <div className="flex items-center gap-3">
+                  {reportFormData.screenshotUrl && (
+                    <img
+                      src={reportFormData.screenshotUrl}
+                      alt="Preview"
+                      className="w-12 h-12 object-cover rounded-lg border border-blue-900 shrink-0"
+                    />
+                  )}
+                  <label className="flex-1 cursor-pointer">
+                    <div className="px-3 py-2 bg-[#030616] hover:bg-[#070e28] border border-dashed border-cyan-500/50 rounded-lg text-slate-300 flex items-center justify-center gap-2 text-xs">
+                      <Upload className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>{isReportScreenshotUploading ? 'Mengompres...' : 'Pilih Foto dari Galeri...'}</span>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleReportScreenshotUpload}
+                      disabled={isReportScreenshotUploading}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Catatan Admin</label>
+                <textarea
+                  rows={2}
+                  value={reportFormData.adminNotes}
+                  onChange={(e) => setReportFormData({ ...reportFormData, adminNotes: e.target.value })}
+                  placeholder="Catatan admin panitia..."
+                  className="w-full bg-[#030616] border border-blue-900 rounded-lg p-2 text-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-blue-900">
+                <button
+                  type="button"
+                  onClick={() => setShowAddReportModal(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg text-xs cursor-pointer shadow-lg"
+                >
+                  Tambah Laporan
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

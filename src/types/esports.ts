@@ -94,6 +94,7 @@ export interface AdminContactInfo {
   instagramUrl: string; // e.g. https://instagram.com/klepon_esports
   whatsappGroupName?: string; // e.g. Grup Khusus Turnamen Mingguan Top 10
   whatsappGroupUrl?: string; // e.g. https://chat.whatsapp.com/...
+  logoUrl?: string; // Custom logo image URL from gallery/upload replacing default 'K' in navbar
 }
 
 export interface EvidenceGuideConfig {

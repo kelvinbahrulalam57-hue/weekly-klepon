@@ -1,7 +1,7 @@
 import {
   PlayerTeam, WinReport, Season, BlacklistEntry,
   AdminContactInfo, MatchGame, ParticipantUser, BannerPoster,
-  EvidenceGuideConfig
+  EvidenceGuideConfig, ReportStatus
 } from '../types/esports';
 import { db } from './firebase';
 import {
@@ -61,6 +61,7 @@ const defaultContacts: AdminContactInfo = {
   instagramUrl: 'https://instagram.com/klepon_esports',
   whatsappGroupName: 'Grup Khusus Turnamen Mingguan Top 10',
   whatsappGroupUrl: 'https://chat.whatsapp.com/GrupKhususBagan10Besar',
+  logoUrl: '',
 };
 
 const officialMainPosterUrl = '/src/assets/images/klepon_hero_esports_1793070950068.jpg';
@@ -643,6 +644,27 @@ class FirestoreEsportsStore {
     return { ...defaultContacts, ...(this.state.contacts || {}) };
   }
 
+  public getCustomLogo(): string {
+    return this.getContacts().logoUrl || '';
+  }
+
+  public updateCustomLogo(logoUrl: string): void {
+    const trimmed = (logoUrl || '').trim();
+    this.state.contacts = {
+      ...this.getContacts(),
+      logoUrl: trimmed,
+    };
+    try {
+      setDoc(doc(db, 'contacts', 'active'), this.state.contacts, { merge: true }).catch((err) => {
+        console.warn('Update custom logo doc error:', err);
+      });
+      setDoc(doc(db, 'config', 'branding'), { logoUrl: trimmed, updatedAt: new Date().toISOString() }, { merge: true }).catch(() => {});
+    } catch {
+      // ignore
+    }
+    this.saveState();
+  }
+
   public isAdmin(): boolean {
     return this.state.isAdminLoggedIn;
   }
@@ -959,6 +981,178 @@ class FirestoreEsportsStore {
     setDoc(doc(db, 'winReports', report.id), report).catch(() => {});
     this.saveState();
     return true;
+  }
+
+  public deleteWinReport(reportId: string, revertPoints = true): boolean {
+    const report = this.state.winReports.find((r) => r.id === reportId);
+    if (!report) return false;
+
+    // If report was DONE (verified) and we are reverting points, deduct from team & participant
+    if (revertPoints && report.status === 'DONE') {
+      const team = this.state.players.find(
+        (p) => p.phone === report.phone || p.name.toLowerCase() === report.teamName.toLowerCase()
+      );
+      if (team && team.points > 0) {
+        team.points = Math.max(0, team.points - (report.pointsAwarded || 1));
+        team.wins = Math.max(0, team.wins - 1);
+        team.updatedAt = new Date().toISOString();
+        setDoc(doc(db, 'players', team.id), team).catch(() => {});
+      }
+
+      const part = this.state.participants.find((p) => p.phone === report.phone);
+      if (part && part.points > 0) {
+        part.points = Math.max(0, part.points - (report.pointsAwarded || 1));
+        part.wins = Math.max(0, part.wins - 1);
+        setDoc(doc(db, 'participants', part.id), part).catch(() => {});
+      }
+    }
+
+    // Remove from in-memory array
+    this.state.winReports = this.state.winReports.filter((r) => r.id !== reportId);
+
+    // Delete from Firestore
+    try {
+      deleteDoc(doc(db, 'winReports', reportId)).catch((err) => {
+        console.warn('Delete winReport error:', err);
+      });
+    } catch {
+      // ignore
+    }
+
+    this.saveState();
+    return true;
+  }
+
+  public updateWinReport(reportId: string, updates: Partial<WinReport>): boolean {
+    const idx = this.state.winReports.findIndex((r) => r.id === reportId);
+    if (idx === -1) return false;
+
+    const current = this.state.winReports[idx];
+    const prevStatus = current.status;
+    const nextStatus = updates.status || prevStatus;
+
+    // Handle point adjustments if status toggled
+    if (prevStatus !== 'DONE' && nextStatus === 'DONE') {
+      // Add points
+      const targetPhone = updates.phone || current.phone;
+      const targetName = updates.teamName || current.teamName;
+      const team = this.state.players.find(
+        (p) => p.phone === targetPhone || p.name.toLowerCase() === targetName.toLowerCase()
+      );
+      if (team) {
+        team.points += 1;
+        team.wins += 1;
+        team.updatedAt = new Date().toISOString();
+        setDoc(doc(db, 'players', team.id), team).catch(() => {});
+      }
+      const part = this.state.participants.find((p) => p.phone === targetPhone);
+      if (part) {
+        part.points += 1;
+        part.wins += 1;
+        setDoc(doc(db, 'participants', part.id), part).catch(() => {});
+      }
+      updates.pointsAwarded = 1;
+      updates.verifiedAt = new Date().toISOString();
+    } else if (prevStatus === 'DONE' && nextStatus !== 'DONE') {
+      // Remove points
+      const team = this.state.players.find(
+        (p) => p.phone === current.phone || p.name.toLowerCase() === current.teamName.toLowerCase()
+      );
+      if (team && team.points > 0) {
+        team.points = Math.max(0, team.points - 1);
+        team.wins = Math.max(0, team.wins - 1);
+        team.updatedAt = new Date().toISOString();
+        setDoc(doc(db, 'players', team.id), team).catch(() => {});
+      }
+      const part = this.state.participants.find((p) => p.phone === current.phone);
+      if (part && part.points > 0) {
+        part.points = Math.max(0, part.points - 1);
+        part.wins = Math.max(0, part.wins - 1);
+        setDoc(doc(db, 'participants', part.id), part).catch(() => {});
+      }
+      updates.pointsAwarded = 0;
+      updates.verifiedAt = new Date().toISOString();
+    }
+
+    const updated: WinReport = {
+      ...current,
+      ...updates,
+    };
+
+    this.state.winReports[idx] = updated;
+
+    try {
+      setDoc(doc(db, 'winReports', reportId), updated, { merge: true }).catch((err) => {
+        console.warn('Update winReport error:', err);
+      });
+    } catch {
+      // ignore
+    }
+
+    this.saveState();
+    return true;
+  }
+
+  public addManualWinReport(data: {
+    phone: string;
+    teamName: string;
+    captainName?: string;
+    potName?: string;
+    storanDate?: string;
+    screenshotUrl?: string;
+    status: ReportStatus;
+    adminNotes?: string;
+  }): WinReport {
+    const isDone = data.status === 'DONE';
+    const pointsAwarded = isDone ? 1 : 0;
+    const nowIso = new Date().toISOString();
+
+    const newReport: WinReport = {
+      id: `rep-manual-${Date.now()}`,
+      phone: data.phone.trim(),
+      teamName: data.teamName.trim(),
+      captainName: data.captainName?.trim() || data.teamName.trim(),
+      storanDate: data.storanDate || nowIso.slice(0, 16).replace('T', ' '),
+      potName: data.potName?.trim() || 'Fast Tournament FF',
+      screenshotUrl: data.screenshotUrl || sampleDoneStickerUrl,
+      status: data.status,
+      pointsAwarded,
+      adminNotes: data.adminNotes?.trim() || (isDone ? 'Ditambahkan manual oleh Panitia KLEPON FT (Status: Sah)' : 'Dicatat sebagai laporan Ditolak / Melanggar oleh Admin'),
+      submittedAt: nowIso,
+      verifiedAt: nowIso,
+      verifiedBy: 'Panitia KLEPON FT',
+    };
+
+    this.state.winReports.unshift(newReport);
+
+    if (isDone) {
+      const team = this.state.players.find(
+        (p) => p.phone === newReport.phone || p.name.toLowerCase() === newReport.teamName.toLowerCase()
+      );
+      if (team) {
+        team.points += 1;
+        team.wins += 1;
+        team.updatedAt = nowIso;
+        setDoc(doc(db, 'players', team.id), team).catch(() => {});
+      }
+      const part = this.state.participants.find((p) => p.phone === newReport.phone);
+      if (part) {
+        part.points += 1;
+        part.wins += 1;
+        setDoc(doc(db, 'participants', part.id), part).catch(() => {});
+      }
+    }
+
+    try {
+      setDoc(doc(db, 'winReports', newReport.id), newReport).catch((err) => {
+        console.warn('Save manual winReport error:', err);
+      });
+    } catch {
+      // ignore
+    }
+
+    this.saveState();
+    return newReport;
   }
 
   public blacklistTeam(teamName: string, phone: string, reason: string, penalty: string, evidenceSummary: string): void {

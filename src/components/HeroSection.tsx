@@ -5,11 +5,13 @@ import { esportsStore } from '../services/store';
 interface HeroSectionProps {
   onOpenReportModal: () => void;
   onOpenAuthModal: () => void;
+  onReplayIntro?: () => void;
 }
 
 export const HeroSection: React.FC<HeroSectionProps> = ({
   onOpenReportModal,
   onOpenAuthModal,
+  onReplayIntro,
 }) => {
   const contacts = esportsStore.getContacts();
   const season = esportsStore.getSeason();
@@ -31,14 +33,28 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         <div className="absolute top-20 right-10 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 lg:px-8">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 lg:px-8 animate-fade-in-up">
         <div className="max-w-3xl">
-          {/* Free Entry & Weekly Badge */}
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-blue-950/80 border border-cyan-500/40 rounded-full text-xs font-mono text-cyan-300 mb-6 shadow-lg shadow-cyan-500/10 backdrop-blur-sm">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-            <span className="font-bold tracking-wide">TURNAMEN MINGGUAN SISTEM BAGAN 10 BESAR</span>
-            <span className="text-blue-500">·</span>
-            <span className="text-amber-400 font-bold">100% GRATIS</span>
+          {/* Free Entry & Weekly Badge & Replay Intro */}
+          <div className="flex flex-wrap items-center gap-2 mb-6">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-blue-950/80 border border-cyan-500/40 rounded-full text-xs font-mono text-cyan-300 shadow-lg shadow-cyan-500/10 backdrop-blur-sm">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+              <span className="font-bold tracking-wide">TURNAMEN MINGGUAN SISTEM BAGAN 10 BESAR</span>
+              <span className="text-blue-500">·</span>
+              <span className="text-amber-400 font-bold">100% GRATIS</span>
+            </div>
+
+            {onReplayIntro && (
+              <button
+                type="button"
+                onClick={onReplayIntro}
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-400/40 hover:border-cyan-300 text-cyan-300 hover:text-white rounded-full text-xs font-mono transition-all cursor-pointer shadow-sm group"
+                title="Tonton Ulang Animasi Masuk Arena Turnamen"
+              >
+                <Sparkles className="w-3 h-3 text-cyan-400 group-hover:rotate-12 transition-transform" />
+                <span>Putar Ulang Animasi Masuk</span>
+              </button>
+            )}
           </div>
 
           {/* Main Hero Headline */}

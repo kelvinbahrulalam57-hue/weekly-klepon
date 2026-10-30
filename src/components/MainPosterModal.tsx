@@ -5,23 +5,25 @@ import { esportsStore } from '../services/store';
 interface MainPosterModalProps {
   onOpenAuth: () => void;
   onOpenReportModal: () => void;
+  isIntroActive?: boolean;
 }
 
-export const MainPosterModal: React.FC<MainPosterModalProps> = ({ onOpenAuth, onOpenReportModal }) => {
+export const MainPosterModal: React.FC<MainPosterModalProps> = ({ onOpenAuth, onOpenReportModal, isIntroActive = false }) => {
   const [isOpen, setIsOpen] = useState(false);
   const mainBanner = esportsStore.getMainBanner();
   const season = esportsStore.getSeason();
   const currentParticipant = esportsStore.getCurrentParticipant();
 
   useEffect(() => {
+    if (isIntroActive) return;
     const dismissedSession = sessionStorage.getItem('klepon_banner_dismissed');
     if (!dismissedSession) {
       const timer = setTimeout(() => {
         setIsOpen(true);
-      }, 700);
+      }, 800);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [isIntroActive]);
 
   const handleClose = (dontShowAgain = false) => {
     setIsOpen(false);

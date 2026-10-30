@@ -1,5 +1,4 @@
-import React from 'react';
-import { ShieldAlert, Trophy, Swords, Send, PhoneCall, User, LogOut, Clock, ListFilter } from 'lucide-react';
+import { ShieldAlert, Trophy, Swords, Send, PhoneCall, User, LogOut, Clock, ListFilter, Sparkles } from 'lucide-react';
 import { esportsStore } from '../services/store';
 
 interface NavbarProps {
@@ -8,6 +7,7 @@ interface NavbarProps {
   onOpenReportModal: () => void;
   onOpenAuthModal: () => void;
   onOpenHistoryModal: () => void;
+  onReplayIntro?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -16,16 +16,18 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenReportModal,
   onOpenAuthModal,
   onOpenHistoryModal,
+  onReplayIntro,
 }) => {
   const currentParticipant = esportsStore.getCurrentParticipant();
   const season = esportsStore.getSeason();
+  const customLogo = esportsStore.getCustomLogo();
   const userReports = currentParticipant ? esportsStore.getUserWinReports(currentParticipant.phone) : [];
   const pendingCount = userReports.filter((r) => r.status === 'PENDING').length;
 
   return (
     <header className="sticky top-0 z-50 bg-[#04081c]/95 backdrop-blur-md border-b border-blue-900/50 px-4 lg:px-8 py-3.5 transition-all shadow-lg shadow-black/40">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-6">
-        {/* Zone 1: Brand Wordmark */}
+        {/* Zone 1: Brand Wordmark & Logo */}
         <div className="flex items-center gap-3 shrink-0">
           <a
             href="#hero"
@@ -37,9 +39,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             }}
             className="flex items-center gap-2.5 group cursor-pointer"
           >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 via-blue-600 to-indigo-700 flex items-center justify-center font-black text-slate-950 font-display text-lg tracking-wider shadow-lg shadow-cyan-500/20 group-hover:scale-105 transition-transform border border-cyan-400/30">
-              K
-            </div>
+            {customLogo ? (
+              <img
+                src={customLogo}
+                alt="Logo Turnamen"
+                className="w-8 h-8 rounded-lg object-cover border border-cyan-400/50 shadow-md shadow-cyan-500/25 group-hover:scale-105 transition-transform bg-slate-900"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 via-blue-600 to-indigo-700 flex items-center justify-center font-black text-slate-950 font-display text-lg tracking-wider shadow-lg shadow-cyan-500/20 group-hover:scale-105 transition-transform border border-cyan-400/30">
+                K
+              </div>
+            )}
             <div>
               <span className="text-base sm:text-lg font-black tracking-wider text-white font-display uppercase block leading-none">
                 KLEPON <span className="text-cyan-400">WEEKLY TURNAMENT</span>
@@ -77,6 +87,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               <PhoneCall className="w-4 h-4 text-blue-400" />
               Saluran Info & Konsultasi
             </a>
+            {onReplayIntro && (
+              <button
+                type="button"
+                onClick={onReplayIntro}
+                className="text-cyan-400/90 hover:text-cyan-200 transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 cursor-pointer text-xs font-mono px-2 py-1 rounded-md bg-blue-950/60 border border-cyan-500/30 hover:border-cyan-400/60 shadow-sm"
+                title="Putar Ulang Animasi Masuk Turnamen"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                <span>Animasi Masuk</span>
+              </button>
+            )}
           </nav>
         ) : (
           <div className="flex items-center gap-2 text-xs font-mono text-cyan-400">
