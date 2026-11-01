@@ -12,6 +12,8 @@ import {
 
 const STORAGE_KEY = 'klepon_weekly_turnament_state_v5';
 const PARTICIPANT_KEY = 'klepon_weekly_participant_v5';
+const DELETED_REPORTS_KEY = 'klepon_deleted_report_ids_v1';
+const REPORTS_SEEDED_KEY = 'klepon_reports_seeded_v1';
 export const ADMIN_MASTER_PASSWORD = 'kleponadmin123/';
 
 const calculateSeasonDates = (weekNum = 1) => {
@@ -300,18 +302,44 @@ class FirestoreEsportsStore {
     this.checkAutoReset();
   }
 
+  public getDeletedReportIds(): Set<string> {
+    try {
+      const stored = localStorage.getItem(DELETED_REPORTS_KEY);
+      if (stored) {
+        return new Set(JSON.parse(stored));
+      }
+    } catch {
+      // ignore
+    }
+    return new Set<string>();
+  }
+
+  public markReportDeleted(id: string): void {
+    if (!id) return;
+    const deleted = this.getDeletedReportIds();
+    deleted.add(id);
+    try {
+      localStorage.setItem(DELETED_REPORTS_KEY, JSON.stringify(Array.from(deleted)));
+    } catch {
+      // ignore
+    }
+  }
+
   private loadState(): AppState {
+    const deletedIds = this.getDeletedReportIds();
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
+        const parsedReports: WinReport[] = Array.isArray(parsed.winReports) ? parsed.winReports : [];
+        const cleanReports = parsedReports.filter((r) => !deletedIds.has(r.id));
         return {
           season: { ...defaultSeason, ...(parsed.season || {}) },
           contacts: { ...defaultContacts, ...(parsed.contacts || {}) },
           banners: Array.isArray(parsed.banners) && parsed.banners.length > 0 ? parsed.banners : defaultBanners,
           players: Array.isArray(parsed.players) ? parsed.players : defaultPlayers,
           participants: Array.isArray(parsed.participants) ? parsed.participants : defaultParticipants,
-          winReports: Array.isArray(parsed.winReports) ? parsed.winReports : defaultWinReports,
+          winReports: cleanReports,
           blacklist: Array.isArray(parsed.blacklist) ? parsed.blacklist : defaultBlacklist,
           evidenceGuide: parsed.evidenceGuide ? { ...defaultEvidenceGuide, ...parsed.evidenceGuide } : defaultEvidenceGuide,
           currentParticipant: this.loadParticipant(),
@@ -323,12 +351,15 @@ class FirestoreEsportsStore {
       // Fallback
     }
 
+    const seeded = localStorage.getItem(REPORTS_SEEDED_KEY);
+    const initialReports = seeded ? [] : defaultWinReports.filter((r) => !deletedIds.has(r.id));
+
     return {
       season: defaultSeason,
       participants: defaultParticipants,
       currentParticipant: this.loadParticipant(),
       players: defaultPlayers,
-      winReports: defaultWinReports,
+      winReports: initialReports,
       banners: defaultBanners,
       blacklist: defaultBlacklist,
       contacts: defaultContacts,
@@ -399,25 +430,25 @@ class FirestoreEsportsStore {
 
       // 2. Listen to WinReports (Real-time sync to Admin Dashboard)
       onSnapshot(collection(db, 'winReports'), (snapshot: QuerySnapshot) => {
-        if (!snapshot.empty) {
-          const remoteReports: WinReport[] = [];
-          snapshot.forEach((d: QueryDocumentSnapshot) => remoteReports.push(d.data() as WinReport));
-          const rMap = new Map<string, WinReport>();
-          this.state.winReports.forEach((r) => rMap.set(r.id, r));
-          remoteReports.forEach((r) => rMap.set(r.id, r));
-          this.state.winReports = Array.from(rMap.values()).sort(
-            (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
-          );
-          this.saveState();
-        } else {
-          defaultWinReports.forEach(async (r) => {
-            try {
-              await setDoc(doc(db, 'winReports', r.id), r);
-            } catch {
-              // ignore
-            }
-          });
-        }
+        const deletedIds = this.getDeletedReportIds();
+        const remoteReports: WinReport[] = [];
+
+        snapshot.forEach((d: QueryDocumentSnapshot) => {
+          const rep = d.data() as WinReport;
+          const reportId = rep.id || d.id;
+          if (deletedIds.has(reportId) || deletedIds.has(d.id)) {
+            // Document was permanently deleted by admin - purge from Firestore so it never returns
+            deleteDoc(doc(db, 'winReports', d.id)).catch(() => {});
+          } else {
+            remoteReports.push({ ...rep, id: reportId });
+          }
+        });
+
+        // Strictly respect remote reports and deleted filter (NEVER re-merge deleted items from old memory)
+        this.state.winReports = remoteReports.sort(
+          (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
+        );
+        this.saveState();
       }, (err: FirestoreError) => {
         console.warn('Firestore winReports realtime fallback:', err.message);
       });
@@ -1044,11 +1075,15 @@ class FirestoreEsportsStore {
   }
 
   public deleteWinReport(reportId: string, revertPoints = true): boolean {
+    if (!reportId) return false;
+
+    // 1. Mark as permanently deleted so it never reappears on reload, sync, or snapshot
+    this.markReportDeleted(reportId);
+
     const report = this.state.winReports.find((r) => r.id === reportId);
-    if (!report) return false;
 
     // If report was DONE (verified) and we are reverting points, deduct from team & participant
-    if (revertPoints && report.status === 'DONE') {
+    if (report && revertPoints && report.status === 'DONE') {
       const team = this.state.players.find(
         (p) => p.phone === report.phone || p.name.toLowerCase() === report.teamName.toLowerCase()
       );
@@ -1067,10 +1102,10 @@ class FirestoreEsportsStore {
       }
     }
 
-    // Remove from in-memory array
+    // 2. Remove from in-memory array
     this.state.winReports = this.state.winReports.filter((r) => r.id !== reportId);
 
-    // Delete from Firestore
+    // 3. Delete from Firestore permanently
     try {
       deleteDoc(doc(db, 'winReports', reportId)).catch((err) => {
         console.warn('Delete winReport error:', err);
