@@ -13,6 +13,7 @@ import {
 const STORAGE_KEY = 'klepon_weekly_turnament_state_v5';
 const PARTICIPANT_KEY = 'klepon_weekly_participant_v5';
 const DELETED_REPORTS_KEY = 'klepon_deleted_report_ids_v1';
+const DELETED_BANNERS_KEY = 'klepon_deleted_banner_ids_v1';
 const REPORTS_SEEDED_KEY = 'klepon_reports_seeded_v1';
 export const ADMIN_MASTER_PASSWORD = 'kleponadmin123/';
 
@@ -66,7 +67,7 @@ const defaultContacts: AdminContactInfo = {
   logoUrl: '',
 };
 
-const officialMainPosterUrl = '/src/assets/images/klepon_hero_esports_1793070950068.jpg';
+const officialMainPosterUrl = '/src/assets/images/klepon_official_tournament_poster_1793580030422.jpg';
 const sampleDoneStickerUrl = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80';
 const sampleAvatar = 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?auto=format&fit=crop&w=200&q=80';
 
@@ -83,11 +84,11 @@ export const defaultEvidenceGuide: EvidenceGuideConfig = {
 const defaultBanners: BannerPoster[] = [
   {
     id: 'banner-klepon-main',
-    title: 'KLEPON WEEKLY TURNAMENT FREE',
+    title: 'KLEPON WEEKLY TOURNAMENT - FREE FIRE CLASH SQUAD',
     imageUrl: officialMainPosterUrl,
     caption: 'Turnamen Gratis Free Fire Clash Squad Mingguan. Ambil Top 10 Poin Terbesar masuk babak gugur perebutan Total Hadiah Rp 30.000!',
     isMain: true,
-    uploadedBy: 'Panitia KLEPON FT',
+    uploadedBy: 'Panitia Resmi KLEPON FT',
     createdAt: new Date().toISOString().split('T')[0],
   },
 ];
@@ -325,18 +326,63 @@ class FirestoreEsportsStore {
     }
   }
 
+  public getDeletedBannerIds(): Set<string> {
+    try {
+      const stored = localStorage.getItem(DELETED_BANNERS_KEY);
+      if (stored) {
+        return new Set(JSON.parse(stored));
+      }
+    } catch {
+      // ignore
+    }
+    return new Set<string>();
+  }
+
+  public markBannerDeleted(id: string): void {
+    if (!id) return;
+    const deleted = this.getDeletedBannerIds();
+    deleted.add(id);
+    try {
+      localStorage.setItem(DELETED_BANNERS_KEY, JSON.stringify(Array.from(deleted)));
+    } catch {
+      // ignore
+    }
+  }
+
   private loadState(): AppState {
     const deletedIds = this.getDeletedReportIds();
+    const deletedBannerIds = this.getDeletedBannerIds();
+
+    const sanitizeBanner = (b: BannerPoster): BannerPoster => {
+      // If poster uses the old plain background image, upgrade it to the new official tournament poster with graphics
+      if (b.imageUrl && b.imageUrl.includes('klepon_hero_esports_1793070950068.jpg')) {
+        return {
+          ...b,
+          title: b.title.includes('WEEKLY') ? b.title : 'KLEPON WEEKLY TOURNAMENT - FREE FIRE CLASH SQUAD',
+          imageUrl: officialMainPosterUrl,
+        };
+      }
+      return b;
+    };
+
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
         const parsedReports: WinReport[] = Array.isArray(parsed.winReports) ? parsed.winReports : [];
         const cleanReports = parsedReports.filter((r) => !deletedIds.has(r.id));
+
+        const parsedBanners: BannerPoster[] = Array.isArray(parsed.banners) ? parsed.banners : [];
+        const cleanBanners = parsedBanners
+          .filter((b) => !deletedBannerIds.has(b.id) && b.imageUrl && b.imageUrl.trim().length > 5)
+          .map(sanitizeBanner);
+
+        const finalBanners = cleanBanners.length > 0 ? cleanBanners : defaultBanners;
+
         return {
           season: { ...defaultSeason, ...(parsed.season || {}) },
           contacts: { ...defaultContacts, ...(parsed.contacts || {}) },
-          banners: Array.isArray(parsed.banners) && parsed.banners.length > 0 ? parsed.banners : defaultBanners,
+          banners: finalBanners,
           players: Array.isArray(parsed.players) ? parsed.players : defaultPlayers,
           participants: Array.isArray(parsed.participants) ? parsed.participants : defaultParticipants,
           winReports: cleanReports,
@@ -453,24 +499,49 @@ class FirestoreEsportsStore {
         console.warn('Firestore winReports realtime fallback:', err.message);
       });
 
-      // 3. Listen to Banners from Gallery
+      // 3. Listen to Banners from Gallery (with permanent deletion purge and plain poster upgrade)
       onSnapshot(collection(db, 'banners'), (snapshot: QuerySnapshot) => {
-        if (!snapshot.empty) {
-          const remoteBanners: BannerPoster[] = [];
-          snapshot.forEach((d: QueryDocumentSnapshot) => remoteBanners.push(d.data() as BannerPoster));
-          const bMap = new Map<string, BannerPoster>();
-          this.state.banners.forEach((b) => bMap.set(b.id, b));
-          remoteBanners.forEach((b) => bMap.set(b.id, b));
-          this.state.banners = Array.from(bMap.values());
-          this.saveState();
-        } else {
-          defaultBanners.forEach(async (b) => {
-            try {
-              await setDoc(doc(db, 'banners', b.id), b);
-            } catch {
-              // ignore
+        const deletedBannerIds = this.getDeletedBannerIds();
+        const remoteBanners: BannerPoster[] = [];
+
+        snapshot.forEach((d: QueryDocumentSnapshot) => {
+          const b = d.data() as BannerPoster;
+          const bannerId = b.id || d.id;
+          if (deletedBannerIds.has(bannerId) || deletedBannerIds.has(d.id)) {
+            // Document was permanently deleted by admin - purge from Firestore so it never returns
+            deleteDoc(doc(db, 'banners', d.id)).catch(() => {});
+          } else if (b.imageUrl && b.imageUrl.trim().length > 5) {
+            // Auto-upgrade any old plain background poster to the rich tournament poster
+            if (b.imageUrl.includes('klepon_hero_esports_1793070950068.jpg')) {
+              const upgraded: BannerPoster = {
+                ...b,
+                id: bannerId,
+                title: b.title.includes('WEEKLY') ? b.title : 'KLEPON WEEKLY TOURNAMENT - FREE FIRE CLASH SQUAD',
+                imageUrl: officialMainPosterUrl,
+              };
+              setDoc(doc(db, 'banners', d.id), upgraded, { merge: true }).catch(() => {});
+              remoteBanners.push(upgraded);
+            } else {
+              remoteBanners.push({ ...b, id: bannerId });
             }
-          });
+          }
+        });
+
+        if (remoteBanners.length > 0) {
+          // Strictly assign remote non-deleted banners (do NOT union merge old memory)
+          this.state.banners = remoteBanners.sort((a, b) => (b.isMain ? 1 : 0) - (a.isMain ? 1 : 0));
+          this.saveState();
+        } else if (snapshot.empty) {
+          // Only seed default if user has never deleted the main banner
+          if (!deletedBannerIds.has('banner-klepon-main')) {
+            defaultBanners.forEach(async (b) => {
+              try {
+                await setDoc(doc(db, 'banners', b.id), b);
+              } catch {
+                // ignore
+              }
+            });
+          }
         }
       }, (err: FirestoreError) => {
         console.warn('Firestore banners realtime fallback:', err.message);
@@ -697,8 +768,23 @@ class FirestoreEsportsStore {
   }
 
   public getBanners(): BannerPoster[] {
-    const rawList = Array.isArray(this.state.banners) && this.state.banners.length > 0 ? this.state.banners : defaultBanners;
-    return [...rawList].sort((a, b) => (b.isMain ? 1 : 0) - (a.isMain ? 1 : 0));
+    const deletedBannerIds = this.getDeletedBannerIds();
+    const rawList = Array.isArray(this.state.banners) ? this.state.banners : [];
+    const validList = rawList
+      .filter((b) => !deletedBannerIds.has(b.id) && b.imageUrl && b.imageUrl.trim().length > 5)
+      .map((b) => {
+        if (b.imageUrl && b.imageUrl.includes('klepon_hero_esports_1793070950068.jpg')) {
+          return {
+            ...b,
+            title: b.title.includes('WEEKLY') ? b.title : 'KLEPON WEEKLY TOURNAMENT - FREE FIRE CLASH SQUAD',
+            imageUrl: officialMainPosterUrl,
+          };
+        }
+        return b;
+      });
+
+    const result = validList.length > 0 ? validList : defaultBanners;
+    return [...result].sort((a, b) => (b.isMain ? 1 : 0) - (a.isMain ? 1 : 0));
   }
 
   public getMainBanner(): BannerPoster {
@@ -848,6 +934,7 @@ class FirestoreEsportsStore {
   }
 
   public deleteBannerPoster(bannerId: string): void {
+    this.markBannerDeleted(bannerId);
     this.state.banners = this.state.banners.filter((b) => b.id !== bannerId);
     if (!this.state.banners.some((b) => b.isMain) && this.state.banners.length > 0) {
       this.state.banners[0].isMain = true;

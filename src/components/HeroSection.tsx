@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   MessageCircle, Phone, Trophy, UserPlus, Gift, Radio, HelpCircle,
-  Sparkles, Swords
+  Sparkles, Swords, Timer, Clock, Flame, AlertCircle
 } from 'lucide-react';
 import { esportsStore } from '../services/store';
 
@@ -10,6 +10,70 @@ interface HeroSectionProps {
   onOpenAuthModal: () => void;
   onReplayIntro?: () => void;
 }
+
+interface TimeLeft {
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  isExpired: boolean;
+  targetDateLabel: string;
+}
+
+const calculateTimeRemaining = (endDateStr?: string): TimeLeft => {
+  let targetTime: Date;
+
+  if (endDateStr) {
+    // Standard ISO/date string YYYY-MM-DD
+    const parsed = new Date(`${endDateStr}T23:59:59`);
+    if (!isNaN(parsed.getTime()) && parsed.getTime() > Date.now()) {
+      targetTime = parsed;
+    } else {
+      // If already passed or invalid, find upcoming Sunday 23:59:59
+      const now = new Date();
+      const day = now.getDay();
+      const diffToSunday = day === 0 ? 0 : 7 - day;
+      const nextSunday = new Date(now);
+      nextSunday.setDate(now.getDate() + diffToSunday);
+      nextSunday.setHours(23, 59, 59, 999);
+      targetTime = nextSunday;
+    }
+  } else {
+    const now = new Date();
+    const day = now.getDay();
+    const diffToSunday = day === 0 ? 0 : 7 - day;
+    const nextSunday = new Date(now);
+    nextSunday.setDate(now.getDate() + diffToSunday);
+    nextSunday.setHours(23, 59, 59, 999);
+    targetTime = nextSunday;
+  }
+
+  const diffMs = targetTime.getTime() - Date.now();
+  if (diffMs <= 0) {
+    return {
+      days: 0,
+      hours: 0,
+      minutes: 0,
+      seconds: 0,
+      isExpired: true,
+      targetDateLabel: targetTime.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' }),
+    };
+  }
+
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+  return {
+    days,
+    hours,
+    minutes,
+    seconds,
+    isExpired: false,
+    targetDateLabel: targetTime.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short' }),
+  };
+};
 
 export const HeroSection: React.FC<HeroSectionProps> = ({
   onOpenReportModal,
@@ -20,6 +84,20 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   const season = esportsStore.getSeason();
   const currentParticipant = esportsStore.getCurrentParticipant();
   const mainBanner = esportsStore.getMainBanner();
+
+  const [timeLeft, setTimeLeft] = useState<TimeLeft>(() => calculateTimeRemaining(season.endDate));
+
+  useEffect(() => {
+    // Initial calculate
+    setTimeLeft(calculateTimeRemaining(season.endDate));
+
+    // Update every 1 second
+    const interval = setInterval(() => {
+      setTimeLeft(calculateTimeRemaining(season.endDate));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [season.endDate]);
 
   return (
     <section id="hero" className="relative overflow-hidden pt-8 pb-14 lg:py-18 border-b border-blue-900/40 bg-[#040817]">
@@ -103,6 +181,99 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   <span>·</span>
                   <span>Storan Stiker DONE di GB</span>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* HITUNG MUNDUR BATAS PENDAFTARAN & KUALIFIKASI MINGGUAN */}
+          <div className="mb-6 rounded-2xl border border-cyan-500/40 bg-gradient-to-r from-[#071333] via-[#050b24] to-[#0a183d] p-4 sm:p-5 shadow-2xl relative overflow-hidden backdrop-blur-md">
+            {/* Background cyber accent glow */}
+            <div className="absolute top-0 right-0 w-48 h-48 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-600/10 rounded-full blur-2xl pointer-events-none" />
+
+            <div className="relative z-10 space-y-3.5">
+              {/* Header with live indicator */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-500/20 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-cyan-950/80 border border-cyan-400/50 flex items-center justify-center text-cyan-300 shadow-sm">
+                    <Clock className="w-4 h-4 text-cyan-400 animate-pulse" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-black font-display uppercase tracking-wide text-white flex items-center gap-2">
+                      <span>Batas Akhir Pendaftaran & Kualifikasi</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse">
+                        LIVE COUNTDOWN
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      Penentuan Top 10 Poin Terbesar · Ditutup Minggu ({timeLeft.targetDateLabel}), 23:59:59 WIB
+                    </p>
+                  </div>
+                </div>
+
+                <div className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-950/60 border border-blue-800/80 text-[11px] font-mono text-cyan-300">
+                  <Flame className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Minggu Ke-{season.weekNumber || 1}</span>
+                </div>
+              </div>
+
+              {/* Countdown Digits Grid */}
+              <div className="grid grid-cols-4 gap-2 sm:gap-3.5 text-center">
+                {/* HARI */}
+                <div className="bg-[#030617]/90 border border-cyan-500/30 hover:border-cyan-400/60 rounded-xl p-2.5 sm:p-3 shadow-inner transition-colors">
+                  <div className="text-2xl sm:text-4xl font-black font-mono text-transparent bg-clip-text bg-gradient-to-b from-white via-cyan-200 to-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.4)]">
+                    {String(timeLeft.days).padStart(2, '0')}
+                  </div>
+                  <div className="text-[10px] sm:text-[11px] font-mono font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                    Hari
+                  </div>
+                </div>
+
+                {/* JAM */}
+                <div className="bg-[#030617]/90 border border-cyan-500/30 hover:border-cyan-400/60 rounded-xl p-2.5 sm:p-3 shadow-inner transition-colors">
+                  <div className="text-2xl sm:text-4xl font-black font-mono text-transparent bg-clip-text bg-gradient-to-b from-white via-cyan-200 to-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.4)]">
+                    {String(timeLeft.hours).padStart(2, '0')}
+                  </div>
+                  <div className="text-[10px] sm:text-[11px] font-mono font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                    Jam
+                  </div>
+                </div>
+
+                {/* MENIT */}
+                <div className="bg-[#030617]/90 border border-cyan-500/30 hover:border-cyan-400/60 rounded-xl p-2.5 sm:p-3 shadow-inner transition-colors">
+                  <div className="text-2xl sm:text-4xl font-black font-mono text-transparent bg-clip-text bg-gradient-to-b from-white via-cyan-200 to-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.4)]">
+                    {String(timeLeft.minutes).padStart(2, '0')}
+                  </div>
+                  <div className="text-[10px] sm:text-[11px] font-mono font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                    Menit
+                  </div>
+                </div>
+
+                {/* DETIK */}
+                <div className="bg-[#030617]/90 border border-cyan-500/30 hover:border-cyan-400/60 rounded-xl p-2.5 sm:p-3 shadow-inner transition-colors">
+                  <div className="text-2xl sm:text-4xl font-black font-mono text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.4)]">
+                    {String(timeLeft.seconds).padStart(2, '0')}
+                  </div>
+                  <div className="text-[10px] sm:text-[11px] font-mono font-bold text-amber-300/80 uppercase tracking-widest mt-0.5">
+                    Detik
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Footer */}
+              <div className="flex items-center justify-between text-[11px] font-mono pt-1">
+                {timeLeft.isExpired ? (
+                  <div className="flex items-center gap-1.5 text-rose-300">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>Kualifikasi minggu ini telah selesai. Klasemen sedang difinalisasi untuk bagan gugur 10 besar!</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-slate-300">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span>Kumpulkan poin kemenangan FT & setor stiker DONE admin sebelum waktu berakhir!</span>
+                  </div>
+                )}
+                <span className="text-cyan-400 font-bold hidden sm:inline">10 Tiket Tersedia</span>
               </div>
             </div>
           </div>
