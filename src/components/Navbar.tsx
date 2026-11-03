@@ -106,8 +106,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         )}
 
-        {/* Zone 3: Primary Action - Participant Registration / Login */}
-        <div className="flex items-center gap-3 shrink-0">
+        {/* Zone 3: Primary Action - Participant Registration / Login & Admin Access */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {currentView === 'admin' ? (
             <button
               onClick={() => onNavigate('portal')}
@@ -115,7 +115,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               Kembali ke Portal
             </button>
-          ) : currentParticipant ? (
+          ) : (
+            <>
+              <button
+                onClick={() => onNavigate('admin')}
+                className="flex items-center gap-1 px-2.5 sm:px-3 py-1.5 bg-[#081232] hover:bg-[#0c1d52] border border-cyan-500/40 text-cyan-300 rounded-lg text-xs font-semibold cursor-pointer transition-all shadow-sm"
+                title="Buka Dashboard Kontrol Panitia"
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">Panel Admin</span>
+                <span className="sm:hidden">Admin</span>
+              </button>
+              {currentParticipant ? (
             <div className="flex items-center gap-2">
               {/* Riwayat Storan Button with Under Review indicator */}
               <button
@@ -175,6 +186,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>Daftar / Login Peserta</span>
             </button>
           )}
+        </>
+      )}
         </div>
       </div>
     </header>

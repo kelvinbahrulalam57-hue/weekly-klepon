@@ -12,6 +12,8 @@ export interface ParticipantUser {
   wins: number;
   matchesPlayed: number;
   streak?: number;
+  totalKills?: number;
+  tournamentParticipations?: number;
 }
 
 export interface PlayerTeam {
@@ -24,6 +26,8 @@ export interface PlayerTeam {
   wins: number;
   matchesPlayed: number;
   streak?: number;
+  totalKills?: number;
+  tournamentParticipations?: number;
   game: MatchGame;
   status: 'active' | 'warned' | 'blacklisted';
   photoUrl?: string;

@@ -55,9 +55,8 @@ export const BannerGallerySection: React.FC<BannerGallerySectionProps> = () => {
           </div>
 
           <div className="lg:col-span-7 p-6 sm:p-8 space-y-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-cyan-950/70 border border-cyan-400/40 rounded-full text-[11px] font-mono font-bold text-cyan-300 uppercase shadow-inner">
-              <Sparkles className="w-3 h-3 text-cyan-400" />
-              <span>POSTER UTAMA AKTIF</span>
+            <div className="text-xs font-mono font-bold text-cyan-400 uppercase tracking-widest">
+              Poster Utama Turnamen
             </div>
 
             <h3 className="text-xl sm:text-2xl font-black font-display uppercase text-white leading-snug">

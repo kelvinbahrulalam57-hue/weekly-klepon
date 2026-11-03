@@ -28,6 +28,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
 
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [activeTab, setActiveTab] = useState<'queue' | 'top10_broadcast' | 'participants' | 'banners' | 'evidence_guide' | 'blacklist' | 'contacts' | 'season'>('queue');
   const [statusFilter, setStatusFilter] = useState<ReportStatus | 'ALL'>('PENDING');
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,6 +36,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [contactedTeams, setContactedTeams] = useState<Record<string, boolean>>({});
+  const [remindedParticipants, setRemindedParticipants] = useState<Record<string, boolean>>({});
+  const [showReminderTemplateModal, setShowReminderTemplateModal] = useState(false);
+  const [copiedReminderTemplate, setCopiedReminderTemplate] = useState(false);
 
   // Banner management state
   const [bannerTitle, setBannerTitle] = useState('');
@@ -601,6 +605,129 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
     onNotify(`Berhasil mengunduh rekapan data klasemen (${sorted.length} tim) ke file CSV.`);
   };
 
+  const handleExportWinnersCSV = () => {
+    const top10 = esportsStore.getTop10Players();
+    if (!top10 || top10.length === 0) {
+      onNotify('Belum ada data tim pemenang mingguan untuk direkap ke CSV.');
+      return;
+    }
+
+    const season = esportsStore.getSeason();
+    const now = new Date();
+    const dateFormatted = now.toISOString().slice(0, 10);
+    const timeFormatted = now.toTimeString().slice(0, 5).replace(':', '-');
+
+    const escapeCsv = (val: string | number | undefined | null) => {
+      if (val === undefined || val === null) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    // Metadata Turnamen untuk rekapitulasi panitia
+    const metaRows = [
+      ['=== REKAPITULASI HADIAH PEMENANG TURNAMEN MINGGUAN KLEPON FT ===', ''],
+      ['Nama Turnamen', escapeCsv(season.name || 'KLEPON WEEKLY TURNAMENT FREE')],
+      ['Minggu Turnamen', `Minggu Ke-${season.weekNumber || 1}`],
+      ['Total Alokasi Hadiah', escapeCsv(season.totalPrizePool || 'Rp 30.000')],
+      ['Alokasi Juara 1', escapeCsv(season.firstPrize || 'Rp 15.000')],
+      ['Alokasi Juara 2', escapeCsv(season.secondPrize || 'Rp 10.000')],
+      ['Alokasi Juara 3', escapeCsv(season.thirdPrize || 'Rp 5.000')],
+      ['Tanggal Rekapitulasi', `${dateFormatted} ${timeFormatted.replace('-', ':')} WIB`],
+      ['Status Biaya Pendaftaran', '100% GRATIS (Tanpa Dipungut Biaya)'],
+      ['Sistem Lanjutan', 'Top 10 Lolos ke Bagan Gugur Perebutan Hadiah Rp 30.000'],
+      ['', ''], // Baris pemisah kosong
+    ];
+
+    const tableHeaders = [
+      'Peringkat',
+      'Kategori Juara / Lolos',
+      'Nominal Hadiah Tunai',
+      'Nama Tim',
+      'Nama Kapten',
+      'No WhatsApp',
+      'Poin Klasemen',
+      'Kemenangan (Wins)',
+      'Win Streak',
+      'Total Match',
+      'Status Klaim Hadiah',
+      'Tautan WhatsApp Panitia'
+    ];
+
+    const dataRows = top10.map((player, idx) => {
+      const rank = idx + 1;
+      let category = 'Finalis Top 10 (Lolos Bagan)';
+      let prizeAmount = 'Tiket Bagan Gugur 10 Besar (Perebutan Rp 30.000)';
+      let claimStatus = 'Lolos Bagan Gugur 10 Besar';
+
+      if (rank === 1) {
+        category = 'Juara 1 🏆';
+        prizeAmount = season.firstPrize || 'Rp 15.000';
+        claimStatus = 'Pemenang Utama - Siap Transfer / Klaim Hadiah';
+      } else if (rank === 2) {
+        category = 'Juara 2 🥈';
+        prizeAmount = season.secondPrize || 'Rp 10.000';
+        claimStatus = 'Pemenang Kedua - Siap Transfer / Klaim Hadiah';
+      } else if (rank === 3) {
+        category = 'Juara 3 🥉';
+        prizeAmount = season.thirdPrize || 'Rp 5.000';
+        claimStatus = 'Pemenang Ketiga - Siap Transfer / Klaim Hadiah';
+      }
+
+      const rawPhone = (player?.phone || '').replace(/\D/g, '');
+      let cleanPhone = rawPhone;
+      if (cleanPhone.startsWith('0')) {
+        cleanPhone = '62' + cleanPhone.slice(1);
+      } else if (cleanPhone && !cleanPhone.startsWith('62')) {
+        cleanPhone = '62' + cleanPhone;
+      }
+      const waMsg = `Halo Tim *${player.name}* (Kapten: ${player.captainName})! 🏆\n\nSelamat atas pencapaian Anda sebagai *${category}* di turnamen *${season.name}* dengan total *${player.points} Poin*!\nNominal Hadiah: *${prizeAmount}*.\n\nMohon konfirmasi nomor rekening / e-wallet (DANA/Gopay/ShopeePay) untuk pencairan hadiah turnamen mingguan kepada Panitia KLEPON FT.\nTerima kasih atas partisipasinya!`;
+      const waLink = `https://wa.me/${cleanPhone || '6282143219876'}?text=${encodeURIComponent(waMsg)}`;
+
+      return [
+        rank,
+        escapeCsv(category),
+        escapeCsv(prizeAmount),
+        escapeCsv(player.name),
+        escapeCsv(player.captainName || player.name),
+        player.phone ? `="${player.phone}"` : '""',
+        player.points,
+        player.wins,
+        player.streak || 0,
+        player.matchesPlayed || 0,
+        escapeCsv(claimStatus),
+        escapeCsv(waLink)
+      ].join(',');
+    });
+
+    const summaryRows = [
+      ['', ''],
+      ['=== RINGKASAN REKAPITULASI KEUANGAN HADIAH ===', ''],
+      ['Total Tim Pemenang & Lolos Bagan', `${top10.length} Tim`],
+      ['Total Anggaran Hadiah Tunai (Juara 1-3)', escapeCsv(season.totalPrizePool || 'Rp 30.000')],
+      ['Status Verifikasi Panitia', 'Telah Tervalidasi Berdasarkan Bukti Stiker DONE Resmi']
+    ];
+
+    const allCsvLines = [
+      ...metaRows.map((r) => r.join(',')),
+      tableHeaders.join(','),
+      ...dataRows,
+      ...summaryRows.map((r) => r.join(','))
+    ];
+
+    const csvContent = '\uFEFF' + allCsvLines.join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Rekap_Hadiah_Pemenang_Minggu_${season.weekNumber || 1}_${dateFormatted}_${timeFormatted}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    onNotify(`Berhasil mengunduh rekapan hadiah pemenang mingguan (${top10.length} tim) ke file CSV.`);
+  };
+
   const getPlatformShareUrl = () => {
     if (typeof window !== 'undefined' && window.location.origin) {
       return window.location.origin;
@@ -747,36 +874,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
           </div>
           <div>
             <h3 className="text-sm font-bold tracking-wider uppercase text-white font-mono">
-              Autentikasi Diperlukan
+              Autentikasi Panitia Turnamen
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Halaman ini memerlukan otentikasi kode sandi panitia.
+              Masukkan kode sandi internal panitia untuk membuka dashboard kontrol.
             </p>
           </div>
 
           <form onSubmit={handlePasswordLogin} className="space-y-3 pt-2">
-            <input
-              type="password"
-              placeholder="••••••••••••"
-              value={passwordInput}
-              onChange={(e) => {
-                setPasswordInput(e.target.value);
-                setPasswordError(false);
-              }}
-              className="w-full bg-[#030614] border border-blue-900/60 focus:border-cyan-400 rounded-lg px-3 py-2 text-white font-mono text-center tracking-widest text-xs focus:outline-none"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••••••"
+                value={passwordInput}
+                onChange={(e) => {
+                  setPasswordInput(e.target.value);
+                  setPasswordError(false);
+                }}
+                className="w-full bg-[#030614] border border-blue-900/60 focus:border-cyan-400 rounded-lg px-3 py-2.5 text-white font-mono text-center tracking-widest text-xs focus:outline-none pr-8"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-cyan-400 cursor-pointer"
+                title={showPassword ? 'Sembunyikan' : 'Lihat Sandi'}
+              >
+                <Eye className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
             {passwordError && (
-              <p className="text-rose-400 text-[11px] font-mono">Kode sandi salah. Silakan coba lagi.</p>
+              <p className="text-rose-400 text-[11px] font-mono">
+                Kode sandi salah. Gunakan: <strong className="text-cyan-300">kleponadmin123</strong>
+              </p>
             )}
+
             <button
               type="submit"
-              className="w-full py-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-slate-950 font-bold rounded-lg text-xs cursor-pointer shadow-lg shadow-cyan-500/20"
+              className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-slate-950 font-bold rounded-lg text-xs cursor-pointer shadow-lg shadow-cyan-500/20 transition-transform active:scale-98"
             >
               Masuk Dashboard
             </button>
+
+            {/* Quick One-Click Admin Access Helper */}
+            <button
+              type="button"
+              onClick={() => {
+                setPasswordInput('kleponadmin123');
+                esportsStore.verifyAndLoginAdmin('kleponadmin123');
+                onNotify('Akses Panitia Diterima. Selamat datang di Dashboard!');
+              }}
+              className="w-full py-2 bg-blue-950/70 hover:bg-blue-900/80 border border-cyan-500/30 text-cyan-300 rounded-lg text-[11px] font-mono flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+            >
+              <Shield className="w-3 h-3 text-cyan-400" />
+              <span>Masuk Cepat Panitia (kleponadmin123)</span>
+            </button>
           </form>
 
-          <div className="pt-2">
+          <div className="pt-2 flex flex-col items-center gap-2">
             <button
               onClick={onBackToPortal}
               className="text-xs text-slate-400 hover:text-white flex items-center gap-1 mx-auto cursor-pointer"
@@ -822,6 +977,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
         </div>
 
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <button
+            type="button"
+            onClick={handleExportWinnersCSV}
+            className="px-3 py-2 bg-gradient-to-r from-amber-500/20 to-yellow-600/30 hover:from-amber-500/30 hover:to-yellow-600/40 border border-amber-500/50 text-amber-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-md group"
+            title="Unduh Rekapitulasi Hadiah Pemenang Mingguan (Juara 1-3 & Top 10) ke File CSV"
+          >
+            <Gift className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
+            <span className="hidden sm:inline">Rekap Hadiah CSV</span>
+            <span className="sm:hidden">Hadiah</span>
+          </button>
           <button
             type="button"
             onClick={handleOpenShareQr}
@@ -1170,13 +1335,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
                 </p>
               </div>
 
-              <button
-                onClick={handleCopyBroadcastText}
-                className="px-3.5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-md shrink-0"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                <span>Salin Teks Broadcast WA</span>
-              </button>
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                <button
+                  type="button"
+                  onClick={handleExportWinnersCSV}
+                  className="px-3.5 py-2 bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-md shrink-0 transition-transform hover:scale-102"
+                  title="Unduh Rekapitulasi Hadiah Pemenang & Tim Lolos Top 10 ke File CSV"
+                >
+                  <Gift className="w-3.5 h-3.5 fill-current" />
+                  <span>Unduh Rekap Hadiah (CSV)</span>
+                </button>
+                <button
+                  onClick={handleCopyBroadcastText}
+                  className="px-3.5 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-md shrink-0"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Salin Teks Broadcast WA</span>
+                </button>
+              </div>
             </div>
 
             {top10Players.length === 0 ? (
@@ -1265,6 +1441,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
                 </div>
                 <button
                   type="button"
+                  onClick={() => setShowReminderTemplateModal(true)}
+                  className="px-3 py-1.5 bg-[#0a1840] hover:bg-[#0e225c] border border-cyan-500/40 text-cyan-300 hover:text-white font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-md shrink-0 transition-all"
+                  title="Lihat dan salin draft template pesan pengingat turnamen WhatsApp"
+                >
+                  <MessageCircle className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Draft Reminder</span>
+                </button>
+                <button
+                  type="button"
                   onClick={handleExportLeaderboardCSV}
                   className="px-3.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-md shrink-0 transition-all hover:scale-102"
                   title="Unduh seluruh data klasemen peserta dan poin ke file CSV"
@@ -1326,6 +1511,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
                         </td>
                         <td className="py-3 px-3 text-center">
                           <div className="flex items-center justify-center gap-2">
+                            <a
+                              href={esportsStore.getParticipantReminderLink(part)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={() => {
+                                setRemindedParticipants((prev) => ({ ...prev, [part.id]: true }));
+                                onNotify(`Membuka WhatsApp untuk mengirim reminder turnamen ke ${part.name}!`);
+                              }}
+                              className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition-all shadow-sm ${
+                                remindedParticipants[part.id]
+                                  ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300'
+                                  : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-slate-950 font-bold'
+                              }`}
+                              title={`Kirim Pengingat Turnamen ke WhatsApp ${part.name} (${part.phone})`}
+                            >
+                              <MessageCircle className="w-3 h-3 fill-current" />
+                              <span>{remindedParticipants[part.id] ? 'Terkirim' : 'Kirim Reminder'}</span>
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
                             <button
                               onClick={() => setEditingParticipant(part)}
                               className="px-2.5 py-1 bg-blue-950 hover:bg-blue-900 border border-blue-500/40 text-cyan-300 rounded text-xs flex items-center gap-1 cursor-pointer transition-colors"
@@ -1441,6 +1645,74 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* Modal Draft Template Reminder WhatsApp */}
+          {showReminderTemplateModal && (
+            <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-[#070f2c] border-2 border-cyan-500/50 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl text-xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-blue-900/60">
+                  <div className="flex items-center gap-2">
+                    <MessageCircle className="w-5 h-5 text-emerald-400" />
+                    <h4 className="font-bold text-white text-sm uppercase">
+                      Draft Pesan Pengingat (Reminder) Turnamen WA
+                    </h4>
+                  </div>
+                  <button
+                    onClick={() => setShowReminderTemplateModal(false)}
+                    className="text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <p className="text-slate-300 text-xs leading-relaxed">
+                  Pesan pengingat ini otomatis disusun rapi dengan data dinamis nama tim, poin saat ini, serta sisa waktu kualifikasi untuk mendorong peserta segera menyetorkan foto stiker DONE admin.
+                </p>
+
+                <div className="bg-[#030616] border border-blue-900/80 p-3.5 rounded-xl font-mono text-[11px] text-slate-200 leading-relaxed whitespace-pre-wrap select-all max-h-60 overflow-y-auto">
+{`Halo Tim *[Nama Tim]*! 👋🏆
+
+Pengingat resmi dari Panitia *${season.name} (Free Fire Clash Squad)*.
+
+📊 *Status Tim Anda Saat Ini:*
+• Poin Kualifikasi: *[Poin] Pts*
+• Kemenangan FT: *[Wins] Menang*
+• Target: *Top 10 Besar Masuk Bagan Mingguan (Total Hadiah ${season.totalPrizePool})*
+
+⏰ *Penting:* Batas kualifikasi mingguan dan penentuan 10 tim masuk bagan ditutup setiap *Minggu pukul 23:59 WIB*.
+
+Jangan lupa untuk segera setor bukti kemenangan Fast Tournament Anda (foto stiker DONE admin di grup GB) melalui website resmi kami agar poin terakumulasi ke papan klasemen!
+
+🌐 Cek Klasemen & Setor Menang:
+https://ais-pre-vbityw7lerk5mpkdfkshfc-55146541068.asia-southeast1.run.app
+
+Semangat bertanding dan amankan tiket bagan 10 besar! 🔥🎮
+— *Panitia KLEPON ESPORTS*`}
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    💡 Klik tombol "Kirim Reminder" pada baris peserta di tabel untuk membuka WhatsApp dengan pesan yang sudah terisi otomatis.
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sampleText = `Halo Tim *KLEPON ELITE CS*! 👋🏆\n\nPengingat resmi dari Panitia *${season.name} (Free Fire Clash Squad)*.\n\n📊 *Status Tim Anda Saat Ini:*\n• Poin Kualifikasi: *12 Pts*\n• Kemenangan FT: *12 Menang*\n• Target: *Top 10 Besar Masuk Bagan Mingguan (Total Hadiah ${season.totalPrizePool})*\n\n⏰ *Penting:* Batas kualifikasi mingguan dan penentuan 10 tim masuk bagan ditutup setiap *Minggu pukul 23:59 WIB*.\n\nJangan lupa untuk segera setor bukti kemenangan Fast Tournament Anda (foto stiker DONE admin di grup GB) melalui website resmi kami agar poin terakumulasi ke papan klasemen!\n\n🌐 Cek Klasemen & Setor Menang:\nhttps://ais-pre-vbityw7lerk5mpkdfkshfc-55146541068.asia-southeast1.run.app\n\nSemangat bertanding dan amankan tiket bagan 10 besar! 🔥🎮\n— *Panitia KLEPON ESPORTS*`;
+                      navigator.clipboard.writeText(sampleText);
+                      setCopiedReminderTemplate(true);
+                      setTimeout(() => setCopiedReminderTemplate(false), 2500);
+                      onNotify('Draft template reminder disalin ke clipboard!');
+                    }}
+                    className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 cursor-pointer shadow-md shrink-0"
+                  >
+                    {copiedReminderTemplate ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedReminderTemplate ? 'Tersalin!' : 'Salin Contoh'}</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -2371,6 +2643,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNotify, onBack
                 Seluruh akun tim yang terdaftar, nomor WhatsApp, nama kapten, dan profil <strong>TETAP ADA DAN TIDAK DIHAPUS</strong>.
                 Sistem hanya mereset <strong>Poin Klasemen, Kemenangan, dan Total Match menjadi 0</strong> untuk memulai putaran kualifikasi mingguan baru.
               </p>
+            </div>
+
+            {/* Rekapitulasi Hadiah Pemenang Mingguan ke CSV */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-gradient-to-r from-amber-950/40 via-yellow-950/20 to-amber-950/40 border border-amber-500/50 rounded-xl text-xs shadow-lg">
+              <div className="space-y-1">
+                <div className="font-bold text-amber-300 flex items-center gap-1.5">
+                  <Gift className="w-4 h-4 text-amber-400" />
+                  <span>Rekapitulasi Hadiah Pemenang Mingguan (Format CSV)</span>
+                </div>
+                <p className="text-slate-300 text-[11px] leading-relaxed">
+                  Unduh rekapan khusus daftar Juara 1 ({season.firstPrize}), Juara 2 ({season.secondPrize}), Juara 3 ({season.thirdPrize}), serta tim yang lolos Bagan 10 Besar lengkap dengan nomor WhatsApp untuk mempermudah transfer hadiah dan arsip panitia.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleExportWinnersCSV}
+                className="px-4 py-2 bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 text-slate-950 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-md shrink-0 transition-all hover:scale-102"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Unduh Rekap Hadiah</span>
+              </button>
             </div>
 
             {/* Rekomendasi Ekspor CSV untuk Backup */}

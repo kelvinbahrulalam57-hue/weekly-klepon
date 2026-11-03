@@ -12,6 +12,7 @@ import { LeaderboardSection } from './components/LeaderboardSection';
 import { CommunityInfoSection } from './components/CommunityInfoSection';
 import { AntiCheatEducation } from './components/AntiCheatEducation';
 import { AdminDashboard } from './components/AdminDashboard';
+import { AdminErrorBoundary } from './components/AdminErrorBoundary';
 import { WinReportModal } from './components/WinReportModal';
 import { ParticipantAuthModal } from './components/ParticipantAuthModal';
 import { UserSubmissionHistoryModal } from './components/UserSubmissionHistoryModal';
@@ -122,10 +123,12 @@ export default function App() {
             <AntiCheatEducation />
           </>
         ) : (
-          <AdminDashboard
-            onNotify={triggerToast}
-            onBackToPortal={() => setCurrentView('portal')}
-          />
+          <AdminErrorBoundary onBackToPortal={() => setCurrentView('portal')}>
+            <AdminDashboard
+              onNotify={triggerToast}
+              onBackToPortal={() => setCurrentView('portal')}
+            />
+          </AdminErrorBoundary>
         )}
       </main>
 
